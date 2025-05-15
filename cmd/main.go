@@ -8,6 +8,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
+	_ "github.com/joho/godotenv"
+	"github.com/kodakofidev/kodakofi_server/internal/routes"
 	"github.com/kodakofidev/kodakofi_server/pkg"
 )
 
@@ -28,11 +30,13 @@ func main() {
 	log.Println("DB connected successfully")
 
 	http.HandleFunc("/ping", pingHandler)
+	router := routes.InitRouter(dbpool)
 
-	log.Println("Server listening on :8080")
-	if err := http.ListenAndServe(":8000", nil); err != nil {
-		log.Fatal("HTTP server failed:", err)
-	}
+	// log.Println("Server listening on :8080")
+	// if err := (":8000", nil); err != nil {
+	// 	log.Fatal("HTTP server failed:", err)
+	// }
+	router.Run(":8000")
 }
 
 func pingHandler(w http.ResponseWriter, r *http.Request) {
