@@ -14,12 +14,11 @@ type RepoAuth struct {
 	DB *pgxpool.Pool
 }
 
-func NewUser(db *pgxpool.Pool) *RepoAuth {
+func NewAuth(db *pgxpool.Pool) *RepoAuth {
 	return &RepoAuth{DB: db}
 }
 
 func (r *RepoAuth) Register() {
-
 }
 
 func (r *RepoAuth) Login() {
