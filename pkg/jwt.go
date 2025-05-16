@@ -7,15 +7,15 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-type claims struct {
+type Claims struct {
 	Uuid  string `json:"uuid"`
 	Email string `json:"email"`
 	Role  string `json:"role"`
 	jwt.RegisteredClaims
 }
 
-func NewJWT(uuid, email, role string) *claims {
-	return &claims{
+func NewJWT(uuid, email, role string) *Claims {
+	return &Claims{
 		Uuid:  uuid,
 		Email: email,
 		Role:  role,
@@ -26,20 +26,20 @@ func NewJWT(uuid, email, role string) *claims {
 	}
 }
 
-func (c *claims) GenerateToken() (string, error) {
+func (c *Claims) GenerateToken() (string, error) {
 	secret := os.Getenv("JWT_SECRET")
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, c)
 	return token.SignedString([]byte(secret))
 }
 
-func VerifyToken(token string) (*claims, error) {
+func VerifyToken(token string) (*Claims, error) {
 	secret := os.Getenv("JWT_SECRET")
-	data, err := jwt.ParseWithClaims(token, &claims{}, func(t *jwt.Token) (interface{}, error) {
+	data, err := jwt.ParseWithClaims(token, &Claims{}, func(t *jwt.Token) (interface{}, error) {
 		return []byte(secret), nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	claimData := data.Claims.(*claims)
+	claimData := data.Claims.(*Claims)
 	return claimData, nil
 }
