@@ -1,21 +1,28 @@
 package pkg
 
 import (
+	"errors"
 	"os"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
 
-type claims struct {
+// Claims represents JWT claims data - renamed and exported
+type Claims struct {
 	Uuid  string `json:"uuid"`
 	Email string `json:"email"`
 	Role  string `json:"role"`
 	jwt.RegisteredClaims
 }
 
-func NewJWT(uuid, email, role string) *claims {
-	return &claims{
+type JWTErr struct {
+	Type string
+	Err  error
+}
+
+func NewJWT(uuid, email, role string) *Claims {
+	return &Claims{
 		Uuid:  uuid,
 		Email: email,
 		Role:  role,
@@ -26,20 +33,35 @@ func NewJWT(uuid, email, role string) *claims {
 	}
 }
 
-func (c *claims) GenerateToken() (string, error) {
+func (c *Claims) GenerateToken() (string, error) {
 	secret := os.Getenv("JWT_SECRET")
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, c)
 	return token.SignedString([]byte(secret))
 }
 
-func VerifyToken(token string) (*claims, error) {
-	secret := os.Getenv("JWT_SECRET")
-	data, err := jwt.ParseWithClaims(token, &claims{}, func(t *jwt.Token) (interface{}, error) {
-		return []byte(secret), nil
+func (c *Claims) VerifyToken(token string) JWTErr {
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		return JWTErr{
+			Type: "System",
+			Err:  errors.New("Secret not provided"),
+		}
+	}
+	parsedToken, err := jwt.ParseWithClaims(token, c, func(t *jwt.Token) (any, error) {
+		return []byte(jwtSecret), nil
 	})
 	if err != nil {
-		return nil, err
+		return JWTErr{
+			Type: "Token",
+			Err:  err,
+		}
 	}
-	claimData := data.Claims.(*claims)
-	return claimData, nil
+	if !parsedToken.Valid {
+		return JWTErr{
+			Type: "Token",
+			Err:  errors.New("Expired Token"),
+		}
+	}
+
+	return JWTErr{}
 }
