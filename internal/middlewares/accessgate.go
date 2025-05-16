@@ -1,33 +1,30 @@
 package middlewares
 
 import (
-	"net/http"
 	"slices"
 
 	"github.com/gin-gonic/gin"
+	"github.com/kodakofidev/kodakofi_server/internal/models"
 	"github.com/kodakofidev/kodakofi_server/pkg"
 )
 
 func (m *Middleware) AccsessGate(allowedRole ...string) func(*gin.Context) {
 	return func(ctx *gin.Context) {
+		responder := models.NewResponse(ctx)
+		var err error
+
 		payloads, exits := ctx.Get("payloads")
 		if !exits {
-			ctx.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"msg": "please login first",
-			})
+			responder.Unauthorized("Please login first!", err.Error())
 			return
 		}
 		userPayload, ok := payloads.(*pkg.Claims)
 		if !ok {
-			ctx.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"msg": "your login identity is malformed, please login again",
-			})
+			responder.Unauthorized("Your login identity is malformed, please login again!", err.Error())
 			return
 		}
 		if !slices.Contains(allowedRole, userPayload.Role) {
-			ctx.AbortWithStatusJSON(http.StatusForbidden, gin.H{
-				"msg": "you do not have permission to access",
-			})
+			responder.Forbidden("You do not have permission to access", err.Error())
 			return
 		}
 		ctx.Next()
