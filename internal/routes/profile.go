@@ -7,11 +7,13 @@ import (
 	"github.com/kodakofidev/kodakofi_server/internal/repositories"
 )
 
-func profile(r *gin.Engine, db *pgxpool.Pool) {
-	route := r.Group("/api/profile")
+func profile(r *gin.RouterGroup, db *pgxpool.Pool) {
+
 	repo := repositories.NewProfile(db)
 	handlers := handlers.NewProfileHandlers(repo)
 
-	route.GET("", handlers.FetchProfileHandler)
-	route.POST("/edit")
+	profile := r.Group("/profile")
+
+	profile.GET("", handlers.FetchProfileHandler)
+	profile.POST("/edit")
 }
