@@ -20,6 +20,10 @@ migrate-up:
 migrate-down:
 	migrate -path ${MIGRATIONS_DIR} -database ${DB_SOURCE} -verbose down
 
+# make migrate-down-all
+migrate-down-all:
+	migrate -path ${MIGRATIONS_DIR} -database ${DB_SOURCE} -verbose down -all
+
 # make migrate-fix
 migrate-fix:
 	migrate -path ${MIGRATIONS_DIR} -database ${DB_SOURCE} force 0
@@ -31,3 +35,10 @@ run:
 # make seed
 seed:
 	go run ./cmd/seeder/seed.main.go
+
+# Reset database: drop semua tabel, migrasi ulang, dan isi data awal
+# make migrate-reset
+migrate-reset:
+	make migrate-down-all
+	make migrate-up
+	make seed
