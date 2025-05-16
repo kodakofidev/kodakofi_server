@@ -9,6 +9,6 @@ func InitRouter(db *pgxpool.Pool) *gin.Engine {
 	router := gin.Default()
 	rg := router.Group("/api")
 	auth(rg, db)
-	profile(router, db)
+	profile(rg, db)
 	return router
 }
