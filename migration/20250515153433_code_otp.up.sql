@@ -1,7 +1,7 @@
 CREATE TABLE IF NOT EXISTS code_otp (
   id serial PRIMARY KEY,
   user_id uuid NOT NULL,
-  code int NOT NULL,
+  code varchar NOT NULL, -- Changed from int to varchar
   type_id int NOT NULL,
   expired_at timestamptz NOT NULL,
   created_at timestamptz DEFAULT now() NOT NULL,
