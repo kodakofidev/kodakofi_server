@@ -130,6 +130,13 @@ Seeded status successfully.
 Seeding completed successfully.
 ```
 
+### ✅ Migrate Ulang + Seeding
+
+```bash
+make migrate-reset
+```
+Perintah tersebut akan melakukan migrate ulang sekaligus menjalankan seeding
+
 ---
 
 ## 📦 Tips
@@ -142,3 +149,8 @@ Seeding completed successfully.
 
     `ON CONFLICT DO NOTHING`
 - Semua koneksi database menggunakan `pgxpool` (bukan `sqlx` atau `database/sql`)
+- Jika sudah pernah melakukan migrate, maka gunakan:
+
+    ```make migrate-reset```
+
+    untuk migrate ulang dan langsung menjalankan seeding
