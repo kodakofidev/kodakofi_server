@@ -27,9 +27,16 @@ Proyek ini menggunakan PostgreSQL untuk manajemen data. Terdapat dua komponen ut
 
     > 🔔 Pastikan `$GOBIN` sudah masuk ke `PATH`. Tambahkan ke `.bashrc` / `.zshrc` jika belum:
 
+    bash
+
     ```bash
     export PATH=$PATH:$(go env GOPATH)/bin
     ```
+    atau dengan Powershell
+    ```
+    $env:PATH += ";$(go env GOPATH)\bin"
+    ```
+
 
 ---
 
