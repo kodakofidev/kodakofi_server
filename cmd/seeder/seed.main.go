@@ -36,7 +36,7 @@ func main() {
 	seed.SeedOtpType(ctx, db)
 
 	log.Println("Starting categories seeding...")
-	seed.SeedOtpType(ctx, db)
+	seed.SeedCategories(ctx, db)
 
 	log.Println("Seeding completed successfully.")
 }
