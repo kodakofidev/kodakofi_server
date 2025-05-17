@@ -36,7 +36,7 @@ func main() {
 	// if err := (":8000", nil); err != nil {
 	// 	log.Fatal("HTTP server failed:", err)
 	// }
-	router.Run("localhost:8080")
+	router.Run("localhost:8000")
 }
 
 func pingHandler(w http.ResponseWriter, r *http.Request) {
