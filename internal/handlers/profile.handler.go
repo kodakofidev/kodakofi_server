@@ -30,7 +30,8 @@ func (h *ProfileHandlers) FetchProfileHandler(ctx *gin.Context) {
 
 	user, err := h.repo.GetProfile(ctx.Request.Context(), userClaims.Uuid)
 	if err != nil {
-		responder.NotFound("Profile Not Found", err)
+		responder.NotFound("Profile Not Found", err.Error())
+		return
 	}
 
 	responder.Success("Succes", user)
@@ -41,21 +42,23 @@ func (h *ProfileHandlers) EditProfileHandler(ctx *gin.Context) {
 	responder := models.NewResponse(ctx)
 
 	if !exist {
-		responder.NotFound("Not found", exist)
+		responder.NotFound("Not found", "Profile not found")
+		return
 	}
 	userClaims := claims.(*pkg.Claims)
 	userId := userClaims.ID
 
 	var formBody models.ProfileForm
 	if err := ctx.ShouldBind(&formBody); err != nil {
-		responder.BadRequest("Binding Error", err)
+		responder.BadRequest("Bad request", "Binding Error")
+		return
 	}
 
 	var profileImageURL string
 	if formBody.ProfileImage != nil {
 		filename, filepath, err := h.handleFileUpload(ctx, formBody.ProfileImage, userId)
 		if err != nil {
-			responder.InternalServerError("Internal server error", err)
+			responder.InternalServerError("Error", "Internal server error")
 			return
 		}
 
@@ -65,7 +68,8 @@ func (h *ProfileHandlers) EditProfileHandler(ctx *gin.Context) {
 
 	result, err := h.repo.EditProfile(ctx.Request.Context(), userId, formBody, profileImageURL)
 	if err != nil {
-		responder.InternalServerError("Failed to edit profile picture", err)
+		responder.InternalServerError("Internal Server Error", "Failed to edit profile picture")
+		return
 	}
 
 	responder.Success("Profile Upddated succesfully!", result)
