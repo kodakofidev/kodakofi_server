@@ -1,14 +1,15 @@
 package main
 
 import (
-	"context"
 	"log"
-	"net/http"
 	"time"
 
+	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 	_ "github.com/joho/godotenv"
+	"github.com/kodakofidev/kodakofi_server/internal/models"
 	"github.com/kodakofidev/kodakofi_server/internal/routes"
 	"github.com/kodakofidev/kodakofi_server/pkg"
 )
@@ -20,34 +21,37 @@ func main() {
 		log.Println("No .env file found, using system environment variables")
 	}
 
-	var err error
-	dbpool, err = pkg.Posql()
+	db, err := pkg.Posql()
 	if err != nil {
 		log.Fatal("DB connection failed:", err)
 	}
-	defer dbpool.Close()
+	defer db.Close()
 
 	log.Println("DB connected successfully")
 
-	http.HandleFunc("/ping", pingHandler)
-	router := routes.InitRouter(dbpool)
+	router := routes.InitRouter(db)
 
-	// log.Println("Server listening on :8080")
-	// if err := (":8000", nil); err != nil {
-	// 	log.Fatal("HTTP server failed:", err)
-	// }
-	router.Run("localhost:8000")
-}
+	router.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"*"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}))
 
-func pingHandler(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
-	defer cancel()
+	router.GET("/ping", func(c *gin.Context) {
+		responder := models.NewResponse(c)
+		ctx := c.Request.Context()
+		if err := db.Ping(ctx); err != nil {
+			responder.InternalServerError("Database not responding", err.Error())
+			return
+		}
+		responder.Success("pong", nil)
+	})
 
-	if err := dbpool.Ping(ctx); err != nil {
-		http.Error(w, "Database not responding", http.StatusServiceUnavailable)
-		return
+	srv := pkg.Server(router)
+	if err := srv.ListenAndServe(); err != nil {
+		log.Fatalf("Failed to start server: %v", err)
 	}
-
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("pong"))
 }
