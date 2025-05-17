@@ -22,33 +22,53 @@ func NewProfileHandlers(repo repositories.ProfileRepoInterface) *ProfileHandlers
 }
 
 func (h *ProfileHandlers) FetchProfileHandler(ctx *gin.Context) {
-	claims, _ := ctx.Get("Payload")
-
 	responder := models.NewResponse(ctx)
 
-	userClaims := claims.(*pkg.Claims)
+	rawClaims, exists := ctx.Get("payloads")
+	var err error
 
-	user, err := h.repo.GetProfile(ctx.Request.Context(), userClaims.Uuid)
+	if !exists {
+		responder.Unauthorized("authentication required", err)
+		return
+	}
+
+	claims, ok := rawClaims.(*pkg.Claims)
+	if !ok || claims == nil {
+		responder.Unauthorized("invalid authentication claims", err)
+		return
+	}
+
+	user, err := h.repo.GetProfile(ctx.Request.Context(), claims.Uuid)
 	if err != nil {
-		responder.NotFound("Profile Not Found", err)
+		responder.NotFound("Profile Not Found", err.Error())
+		return
 	}
 
 	responder.Success("Succes", user)
 }
 
 func (h *ProfileHandlers) EditProfileHandler(ctx *gin.Context) {
-	claims, exist := ctx.Get("Payload")
 	responder := models.NewResponse(ctx)
 
-	if !exist {
-		responder.NotFound("Not found", exist)
+	rawClaims, exists := ctx.Get("payloads")
+	var err error
+
+	if !exists {
+		responder.Unauthorized("authentication required", err.Error())
+		return
 	}
-	userClaims := claims.(*pkg.Claims)
-	userId := userClaims.ID
+
+	claims, ok := rawClaims.(*pkg.Claims)
+	if !ok || claims == nil || claims.ID == "" {
+		responder.Unauthorized("invalid authentication claims", err.Error())
+		return
+	}
+	userId := claims.ID
 
 	var formBody models.ProfileForm
 	if err := ctx.ShouldBind(&formBody); err != nil {
 		responder.BadRequest("Binding Error", err)
+		return
 	}
 
 	var profileImageURL string
@@ -66,9 +86,10 @@ func (h *ProfileHandlers) EditProfileHandler(ctx *gin.Context) {
 	result, err := h.repo.EditProfile(ctx.Request.Context(), userId, formBody, profileImageURL)
 	if err != nil {
 		responder.InternalServerError("Failed to edit profile picture", err)
+		return
 	}
 
-	responder.Success("Profile Upddated succesfully!", result)
+	responder.Success("Profile Updated succesfully!", result)
 }
 
 // UPLOAD IMAGE HANDLER
