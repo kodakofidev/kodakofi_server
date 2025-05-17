@@ -26,7 +26,7 @@ func NewProduct(db *pgxpool.Pool) *RepoProduct {
 
 func (r *RepoProduct) GetAllProducts(c context.Context, params *models.ProductQueryParams) (*models.PaginatedResponse, error) {
 	log.Println(params, "ini params")
-	const pageSize = 6
+	pageSize := 6
 	offset := (params.Page - 1) * pageSize
 	query := ` select p.id, p.name, p.category_id, p.price, p.description,d.name AS discount_name, d.discount, SUM(po.qty) AS total_order, json_agg(pi.path) AS images, COUNT(r.*) AS total_ratings,c.name AS category_name FROM products p LEFT JOIN product_discounts pd ON pd.product_id = p.id LEFT JOIN discounts d ON d.id = pd.discount_id LEFT JOIN products_orders po ON po.product_id = p.id LEFT JOIN orders o ON o.id = po.order_id LEFT JOIN product_images pi ON pi.product_id = p.id LEFT JOIN ratings r ON r.product_id = p.id JOIN categories c ON c.id = p.category_id `
 	var whereClauses []string
@@ -119,7 +119,7 @@ func (r *RepoProduct) GetAllProducts(c context.Context, params *models.ProductQu
 		return nil, err
 	}
 
-	countQuery := `SELECT COUNT(DISTINCT p.id) FROM products p LEFT JOIN product_discounts pd ON pd.product_id = p.id LEFT JOIN discounts d ON d.id = pd.discount_id JOIN categories c ON c.id = p.category_id`
+	countQuery := `SELECT COUNT(DISTINCT p.id) FROM products p LEFT JOIN product_discounts pd ON pd.product_id = p.id LEFT JOIN discounts d ON d.id = pd.discount_id JOIN categories c ON c.id = p.category_id `
 
 	var totalItems int
 	err = r.DB.QueryRow(c, countQuery).Scan(&totalItems)
@@ -129,10 +129,26 @@ func (r *RepoProduct) GetAllProducts(c context.Context, params *models.ProductQu
 		return nil, errors.New("failed to count products")
 	}
 
+	log.Println("[total items]", totalItems)
 	totalPages := totalItems / pageSize
 	if totalItems%pageSize > 0 {
 		totalPages++
 	}
+	basePath := "/api/product"
+	links := map[string]string{
+		"prev": "",
+		"next": "",
+	}
+
+	if params.Page > 1 {
+		links["prev"] = fmt.Sprintf("%s?page=%d", basePath, params.Page-1)
+	}
+
+	if params.Page < totalPages {
+		links["next"] = fmt.Sprintf("%s?page=%d", basePath, params.Page+1)
+	}
+
+	log.Println("[total page]", totalPages)
 	response := &models.PaginatedResponse{
 		Data: products,
 		Pagination: models.Pagination{
@@ -140,6 +156,7 @@ func (r *RepoProduct) GetAllProducts(c context.Context, params *models.ProductQu
 			PageSize:   pageSize,
 			TotalItems: totalItems,
 			TotalPages: totalPages,
+			Link:       links,
 		},
 	}
 	return response, nil

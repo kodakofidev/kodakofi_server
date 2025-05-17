@@ -38,5 +38,8 @@ func main() {
 	log.Println("Starting status seeding...")
 	seed.SeedStatus(ctx, db)
 
+	log.Println("Starting products seeding...")
+	seed.SeedProducts(ctx, db)
+
 	log.Println("Seeding completed successfully.")
 }
