@@ -26,7 +26,7 @@ func NewProduct(db *pgxpool.Pool) *RepoProduct {
 func (r *RepoProduct) GetAllProducts(c context.Context, params *models.ProductQueryParams) (*models.PaginatedResponse, error) {
 	const pageSize = 6
 	offset := (params.Page - 1) * pageSize
-	query := ` select p.id, p.name, p.category_id,p.price, p.description,d.name AS discount_name,d.discount,SUM(po.qty) AS total_order,json_agg(pi.path) AS images,COUNT(r.*) AS total_ratings,AVG(r.rating) AS average_rating,c.name AS category_name FROM products p LEFT JOIN product_discounts pd ON pd.product_id = p.id LEFT JOIN discounts d ON d.id = pd.discount_id LEFT JOIN products_orders po ON po.product_id = p.id LEFT JOIN orders o ON o.id = po.order_id LEFT JOIN product_images pi ON pi.product_id = p.id LEFT JOIN ratings r ON r.product_id = p.id JOIN categories c ON c.id = p.category_id`
+	query := ` select p.id, p.name, p.category_id,p.price, p.description,d.name AS discount_name,d.discount,SUM(po.qty) AS total_order,json_agg(pi.path) AS images,COUNT(r.*) AS total_ratings,c.name AS category_name FROM products p LEFT JOIN product_discounts pd ON pd.product_id = p.id LEFT JOIN discounts d ON d.id = pd.discount_id LEFT JOIN products_orders po ON po.product_id = p.id LEFT JOIN orders o ON o.id = po.order_id LEFT JOIN product_images pi ON pi.product_id = p.id LEFT JOIN ratings r ON r.product_id = p.id JOIN categories c ON c.id = p.category_id`
 	var whereClauses []string
 	args := []any{pageSize, offset, params.Min, params.Max}
 	argIndex := 3
@@ -90,7 +90,6 @@ func (r *RepoProduct) GetAllProducts(c context.Context, params *models.ProductQu
 			&product.TotalOrder,
 			&product.Images,
 			&product.TotalRatings,
-			&product.AverageRating,
 			&product.CategoryName,
 		)
 		if err != nil {

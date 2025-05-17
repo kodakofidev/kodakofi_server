@@ -1,18 +1,17 @@
 package models
 
 type Product struct {
-	ID            int `json:"page" form:"page" binding:"numeric" db:`
-	Name          string
-	CategoryID    int
-	Price         int
-	Description   string
-	DiscountName  string
-	Discount      int
-	TotalOrder    int
-	Images        []string
-	TotalRatings  int
-	AverageRating int
-	CategoryName  string
+	ID           int      `json:"id,omitempty" form:"id" db:"id"`
+	Name         string   `json:"name,omitempty" form:"name" db:"name"`
+	CategoryID   int      `json:"category_id,omitempty" form:"category_id"  db:"category_id"`
+	Price        int      `json:"price,omitempty" form:"price"  db:"price"`
+	Description  string   `json:"description,omitempty" form:"description"  db:"description"`
+	DiscountName string   `json:"discount_name,omitempty" form:"discount_name"  db:"discount_name"`
+	Discount     int      `json:"discount,omitempty" form:"discount"  db:"discount"`
+	TotalOrder   int      `json:"total_order,omitempty" form:"total_order"  db:"total_order"`
+	Images       []string `json:"images,omitempty" form:"images"  db:"images"`
+	TotalRatings int      `json:"total_ratings,omitempty" form:"total_ratings"  db:"total_ratings"`
+	CategoryName string   `json:"category_name,omitempty" form:"category_name"  db:"category_name"`
 }
 
 type Products []Product
