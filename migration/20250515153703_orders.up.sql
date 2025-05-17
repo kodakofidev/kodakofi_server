@@ -6,7 +6,6 @@ CREATE TABLE IF NOT EXISTS orders (
   delivery_method_id int NOT NULL,
   payment_method_id int NOT NULL,
   status_id int NOT NULL,
-  order_date timestamptz,
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz,
   CONSTRAINT fk_orders_user FOREIGN KEY (user_id) REFERENCES users (id),
