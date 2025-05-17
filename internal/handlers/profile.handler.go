@@ -28,7 +28,7 @@ func (h *ProfileHandlers) FetchProfileHandler(ctx *gin.Context) {
 	var err error
 
 	if !exists {
-		responder.Unauthorized("authentication required", err)
+		responder.Unauthorized("authentication required", err.Error())
 		return
 	}
 
@@ -75,7 +75,7 @@ func (h *ProfileHandlers) EditProfileHandler(ctx *gin.Context) {
 	if formBody.ProfileImage != nil {
 		filename, filepath, err := h.handleFileUpload(ctx, formBody.ProfileImage, userId)
 		if err != nil {
-			responder.InternalServerError("Internal server error", err)
+			responder.InternalServerError("Error", "Internal server error")
 			return
 		}
 
