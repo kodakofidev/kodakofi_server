@@ -27,9 +27,16 @@ Proyek ini menggunakan PostgreSQL untuk manajemen data. Terdapat dua komponen ut
 
     > 🔔 Pastikan `$GOBIN` sudah masuk ke `PATH`. Tambahkan ke `.bashrc` / `.zshrc` jika belum:
 
+    bash
+
     ```bash
     export PATH=$PATH:$(go env GOPATH)/bin
     ```
+    atau dengan Powershell
+    ```
+    $env:PATH += ";$(go env GOPATH)\bin"
+    ```
+
 
 ---
 
@@ -123,6 +130,13 @@ Seeded status successfully.
 Seeding completed successfully.
 ```
 
+### ✅ Migrate Ulang + Seeding
+
+```bash
+make migrate-reset
+```
+Perintah tersebut akan melakukan migrate ulang sekaligus menjalankan seeding
+
 ---
 
 ## 📦 Tips
@@ -135,3 +149,8 @@ Seeding completed successfully.
 
     `ON CONFLICT DO NOTHING`
 - Semua koneksi database menggunakan `pgxpool` (bukan `sqlx` atau `database/sql`)
+- Jika sudah pernah melakukan migrate, maka gunakan:
+
+    ```make migrate-reset```
+
+    untuk migrate ulang dan langsung menjalankan seeding

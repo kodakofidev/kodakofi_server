@@ -2,6 +2,8 @@ CREATE TABLE IF NOT EXISTS products (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
   name varchar UNIQUE NOT NULL,
   category_id int NOT NULL,
+  description text not null,
+  price int not null,
   is_deleted bool DEFAULT false NOT NULL,
   stock int NOT NULL,
   created_at timestamptz DEFAULT now() NOT NULL,

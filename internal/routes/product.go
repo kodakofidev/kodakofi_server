@@ -7,7 +7,7 @@ import (
 	"github.com/kodakofidev/kodakofi_server/internal/repositories"
 )
 
-func product(r *gin.Engine, db *pgxpool.Pool) {
+func product(r *gin.RouterGroup, db *pgxpool.Pool) {
 	route := r.Group("/product")
 	repo := repositories.NewProduct(db)
 	handlers := handlers.NewProduct(repo)

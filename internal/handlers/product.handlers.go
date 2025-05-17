@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"log"
+
 	"github.com/gin-gonic/gin"
 	"github.com/kodakofidev/kodakofi_server/internal/models"
 	"github.com/kodakofidev/kodakofi_server/internal/repositories"
@@ -15,14 +17,17 @@ func NewProduct(repo repositories.ProductRepoInterface) *ProductHandlers {
 }
 
 func (h *ProductHandlers) FetchAllProductsHandler(ctx *gin.Context) {
-	var params *models.ProductQueryParams
+	var params models.ProductQueryParams
 	response := models.NewResponse(ctx)
 	if err := ctx.ShouldBindQuery(&params); err != nil {
 		response.BadRequest("params invalid", err.Error())
+		return
 	}
-	res, err := h.repo.GetAllProducts(ctx.Request.Context(), params)
+	log.Println("[debug query params]", params)
+	res, err := h.repo.GetAllProducts(ctx.Request.Context(), &params)
 	if err != nil {
 		response.InternalServerError("internal server errors", err.Error())
+		return
 	}
 	response.Success("get products success", res)
 }

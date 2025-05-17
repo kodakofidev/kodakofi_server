@@ -32,5 +32,11 @@ func main() {
 	log.Println("Starting status seeding...")
 	seed.SeedStatus(ctx, db)
 
+	log.Println("Starting otp_type seeding...")
+	seed.SeedOtpType(ctx, db)
+
+	log.Println("Starting categories seeding...")
+	seed.SeedCategories(ctx, db)
+
 	log.Println("Seeding completed successfully.")
 }
