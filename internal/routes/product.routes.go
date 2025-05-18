@@ -12,4 +12,5 @@ func product(r *gin.RouterGroup, db *pgxpool.Pool) {
 	repo := repositories.NewProduct(db)
 	handlers := handlers.NewProduct(repo)
 	route.GET("", handlers.FetchAllProductsHandler)
+	route.GET("/:id", handlers.FetchDetailProductHandler)
 }

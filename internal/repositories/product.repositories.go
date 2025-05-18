@@ -13,7 +13,7 @@ import (
 
 type ProductRepoInterface interface {
 	GetAllProducts(c context.Context, params *models.ProductQueryParams) (*models.PaginatedResponse, error)
-	GetDetailProduct()
+	GetDetailProduct(c context.Context, id string) (*models.Product, error)
 }
 
 type RepoProduct struct {
@@ -227,6 +227,53 @@ func (r *RepoProduct) GetAllProducts(c context.Context, params *models.ProductQu
 
 	return response, nil
 }
-func (r *RepoProduct) GetDetailProduct() {
+
+func (r *RepoProduct) GetDetailProduct(c context.Context, id string) (*models.Product, error) {
+	query := `
+		SELECT p.id, p.name, p.category_id, p.price, p.description,
+			d.name AS discount_name, d.discount, 
+			(
+  			  SELECT SUM(po.qty)
+  			  FROM products_orders po
+  			  JOIN orders o ON o.id = po.order_id
+  			  WHERE po.product_id = p.id
+  			) AS total_order,
+  			(
+  			  SELECT json_agg(pi.path)
+  			  FROM product_images pi
+  			  WHERE pi.product_id = p.id
+  			) AS images,
+  			(
+  			  SELECT COUNT(*)
+  			  FROM ratings r
+  			  WHERE r.product_id = p.id AND r.rating = TRUE
+  			) AS total_ratings
+		FROM products p
+		LEFT JOIN product_discounts pd ON pd.product_id = p.id
+		LEFT JOIN discounts d ON d.id = pd.discount_id
+		JOIN categories c ON c.id = p.category_id
+		WHERE p.id = $1`
+
+	var detail models.Product
+	err := r.DB.QueryRow(c, query, id).Scan(
+		&detail.ID,
+		&detail.Name,
+		&detail.CategoryID,
+		&detail.Price,
+		&detail.Description,
+		&detail.DiscountName,
+		&detail.Discount,
+		&detail.TotalOrder,
+		&detail.Images,
+		&detail.TotalRatings,
+	)
+
+	if err != nil {
+		return &models.Product{}, err
+	}
+	return &detail, nil
+}
+
+func (r *RepoProduct) GetRecomendation() {
 
 }

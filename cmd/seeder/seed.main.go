@@ -41,5 +41,11 @@ func main() {
 	log.Println("Starting products seeding...")
 	seed.SeedProducts(ctx, db)
 
+	log.Println("Starting products rating seeding...")
+	seed.SeedRating(ctx, db)
+
+	log.Println("Starting product image seeding...")
+	seed.SeedImage(ctx, db)
+
 	log.Println("Seeding completed successfully.")
 }
