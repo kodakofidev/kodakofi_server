@@ -13,5 +13,6 @@ func InitRouter(db *pgxpool.Pool) *gin.Engine {
 	auth(rg, db)
 	profile(rg, db, middlewares)
 	product(rg, db)
+	order(rg, db, middlewares)
 	return router
 }

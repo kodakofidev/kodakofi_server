@@ -1,6 +1,7 @@
 CREATE TABLE IF NOT EXISTS size_products (
   product_id uuid NOT NULL,
-  size_id int NOT NULL,
+  size_id int NOT NULL DEFAULT 4,
+  stock INT NOT NULL DEFAULT 0,
   created_at timestamptz DEFAULT now() NOT NULL,
   updated_at timestamptz,
   CONSTRAINT size_product_pk PRIMARY KEY (product_id, size_id),
