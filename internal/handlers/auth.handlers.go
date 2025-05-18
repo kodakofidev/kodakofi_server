@@ -83,12 +83,13 @@ func (a *AuthHandlers) Login(ctx *gin.Context) {
 		response.InternalServerError("Failed to generate token", err.Error())
 		return
 	}
-	// Response now includes id as authID
+	// Response now includes id as authID and fullname
 	response.Success("Login successful", map[string]string{
-		"token": token,
-		"role":  result.Role,
-		"email": result.Email,
-		"id":    result.AuthID,
+		"token":    token,
+		"role":     result.Role,
+		"email":    result.Email,
+		"id":       result.AuthID,
+		"fullname": result.Fullname,
 	})
 }
 
@@ -362,6 +363,7 @@ func (a *AuthHandlers) GoogleCallback(ctx *gin.Context) {
 		userReq := models.UserReq{
 			Email:    user.Email,
 			Password: randomPass,
+			Fullname: user.Name, // Use name from Google profile
 		}
 
 		// Register the user
@@ -469,6 +471,7 @@ func (a *AuthHandlers) TokenLogin(ctx *gin.Context) {
 		userReq := models.UserReq{
 			Email:    userInfo.Email,
 			Password: randomPass,
+			Fullname: userInfo.Name, // Use name from Google token
 		}
 
 		// Register the user
