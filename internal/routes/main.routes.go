@@ -9,6 +9,7 @@ import (
 func InitRouter(db *pgxpool.Pool) *gin.Engine {
 	router := gin.Default()
 	middlewares := middlewares.InitMiddleware()
+	router.Use(middlewares.CORSMiddleware)
 	rg := router.Group("/api")
 	auth(rg, db)
 	profile(rg, db, middlewares)
