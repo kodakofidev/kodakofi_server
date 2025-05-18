@@ -23,6 +23,12 @@ func main() {
 	}
 	defer db.Close()
 
+	log.Println("Starting otp_type seeding...")
+	seed.SeedOtpType(ctx, db)
+
+	log.Println("Starting categories seeding...")
+	seed.SeedCategories(ctx, db)
+
 	log.Println("Starting delivery_methods seeding...")
 	seed.SeedDeliveryMethods(ctx, db)
 
@@ -32,11 +38,8 @@ func main() {
 	log.Println("Starting status seeding...")
 	seed.SeedStatus(ctx, db)
 
-	log.Println("Starting otp_type seeding...")
-	seed.SeedOtpType(ctx, db)
-
-	log.Println("Starting categories seeding...")
-	seed.SeedOtpType(ctx, db)
+	log.Println("Starting products seeding...")
+	seed.SeedProducts(ctx, db)
 
 	log.Println("Seeding completed successfully.")
 }
