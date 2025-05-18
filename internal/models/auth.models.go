@@ -5,6 +5,7 @@ import "time"
 type UserReq struct {
 	Email    string `json:"email" db:"email" binding:"required"`
 	Password string `json:"password" db:"password" binding:"required,min=8"`
+	Fullname string `json:"fullname" db:"fullname" binding:"omitempty"`
 }
 
 type UserRes struct {
@@ -13,6 +14,7 @@ type UserRes struct {
 	AuthID     string `json:"id" db:"auth_id"`
 	Pass       string `json:"password" db:"password"`
 	IsVerified bool   `json:"is_verified" db:"is_verified"`
+	Fullname   string `json:"fullname" db:"fullname"`
 }
 
 type OTPVerificationReq struct {
