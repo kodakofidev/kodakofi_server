@@ -8,3 +8,9 @@ CREATE TABLE IF NOT EXISTS ratings (
   CONSTRAINT fk_rating_product FOREIGN KEY (product_id) REFERENCES products (id),
   CONSTRAINT fk_rating_user FOREIGN KEY (user_id) REFERENCES users (id)
 );
+
+ALTER TABLE ratings
+ALTER COLUMN rating TYPE BOOLEAN;
+
+ALTER TABLE ratings 
+DROP CONSTRAINT fk_rating_user;
