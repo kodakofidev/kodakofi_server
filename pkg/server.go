@@ -9,7 +9,7 @@ import (
 )
 
 func Server(router *gin.Engine) *http.Server {
-	var address string = "0.0.0.0:8000"
+	var address string = "0.0.0.0:8080"
 	if port := os.Getenv("PORT"); port != "" {
 		address = ":" + port
 	}
