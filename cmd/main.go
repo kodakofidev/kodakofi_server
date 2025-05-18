@@ -33,8 +33,8 @@ func main() {
 	log.Println("DB connected successfully")
 
 	router := routes.InitRouter(db)
-	router.Static("/img", "./public/img")
-	router.Static("/public", "./public")
+	router.Static("/public/profile", "./public/img")
+	router.Static("/public/product-image", "./public/product-image")
 
 	router.GET("/ping", func(c *gin.Context) {
 		responder := models.NewResponse(c)
