@@ -1,7 +1,7 @@
 CREATE TABLE IF NOT EXISTS profiles (
   user_id uuid PRIMARY KEY NOT NULL,
   fullname varchar,
-  phone varchar unique null,
+  phone varchar null,
   address varchar,
   image varchar,
   created_at timestamptz DEFAULT now() NOT NULL,
