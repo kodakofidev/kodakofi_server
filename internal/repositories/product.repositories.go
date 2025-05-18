@@ -2,9 +2,9 @@ package repositories
 
 import (
 	"context"
-	"errors"
+	"database/sql"
+	"encoding/json"
 	"fmt"
-	"log"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -13,7 +13,7 @@ import (
 
 type ProductRepoInterface interface {
 	GetAllProducts(c context.Context, params *models.ProductQueryParams) (*models.PaginatedResponse, error)
-	GetDetailProduct()
+	GetDetailProduct(c context.Context, id string) (*models.Product, error)
 }
 
 type RepoProduct struct {
@@ -25,15 +25,15 @@ func NewProduct(db *pgxpool.Pool) *RepoProduct {
 }
 
 func (r *RepoProduct) GetAllProducts(c context.Context, params *models.ProductQueryParams) (*models.PaginatedResponse, error) {
-	log.Println(params, "ini params")
 	pageSize := 6
 	offset := (params.Page - 1) * pageSize
-	query := ` select p.id, p.name, p.category_id, p.price, p.description,d.name AS discount_name, d.discount, SUM(po.qty) AS total_order, json_agg(pi.path) AS images, COUNT(r.*) AS total_ratings,c.name AS category_name FROM products p LEFT JOIN product_discounts pd ON pd.product_id = p.id LEFT JOIN discounts d ON d.id = pd.discount_id LEFT JOIN products_orders po ON po.product_id = p.id LEFT JOIN orders o ON o.id = po.order_id LEFT JOIN product_images pi ON pi.product_id = p.id LEFT JOIN ratings r ON r.product_id = p.id JOIN categories c ON c.id = p.category_id `
+
+	// Build WHERE clauses
 	var whereClauses []string
+	var args []interface{}
+	argIndex := 1 // Parameter index dimulai dari 1 untuk CTE
 
-	args := []any{pageSize, offset}
-	argIndex := 3
-
+	// Filter harga
 	if params.Min > 0 || params.Max > 0 {
 		minPrice := params.Min
 		maxPrice := params.Max
@@ -45,95 +45,161 @@ func (r *RepoProduct) GetAllProducts(c context.Context, params *models.ProductQu
 		argIndex += 2
 	}
 
-	if params.Name != "" {
-		whereClauses = append(whereClauses, fmt.Sprintf("p.name ILIKE $%d", argIndex))
-		args = append(args, "%"+params.Name+"%")
+	// Filter pencarian nama
+	if params.Search != "" {
+		whereClauses = append(whereClauses, fmt.Sprintf("p.name ILIKE '%%' || $%d || '%%'", argIndex))
+		args = append(args, params.Search)
 		argIndex++
 	}
+
+	// Filter kategori
 	if params.Category != "" {
 		whereClauses = append(whereClauses, fmt.Sprintf("c.name = $%d", argIndex))
 		args = append(args, params.Category)
 		argIndex++
 	}
+
+	// Filter diskon
 	if params.Discount != "" {
-		whereClauses = append(whereClauses, fmt.Sprintf("d.discount is not null"))
+		whereClauses = append(whereClauses, "d.discount IS NOT NULL")
 	}
 
+	// Filter newest
 	if params.Options == "newest" {
 		whereClauses = append(whereClauses, "p.created_at >= NOW()")
 	}
 
-	if len(whereClauses) > 0 {
-		query += " WHERE " + strings.Join(whereClauses, " AND ")
-	}
-	query += ` GROUP BY p.id, d.id, c.name ORDER BY  `
+	// Filter newest
+	whereClauses = append(whereClauses, "p.is_deleted = false ")
 
+	cteQuery := `
+    WITH filtered_products AS (
+        SELECT p.id
+        FROM products p
+        LEFT JOIN product_discounts pd ON pd.product_id = p.id 
+        LEFT JOIN discounts d ON d.id = pd.discount_id 
+        LEFT JOIN products_orders po ON po.product_id = p.id 
+        LEFT JOIN orders o ON o.id = po.order_id 
+        LEFT JOIN product_images pi ON pi.product_id = p.id 
+        LEFT JOIN ratings r ON r.product_id = p.id 
+        JOIN categories c ON c.id = p.category_id`
+
+	// Tambahkan WHERE clause jika ada
+	if len(whereClauses) > 0 {
+		cteQuery += " WHERE " + strings.Join(whereClauses, " AND ")
+	}
+
+	cteQuery += ` GROUP BY p.id, d.id, c.name
+    ),
+    product_stats AS (
+        SELECT COUNT(*) as total_filtered FROM filtered_products
+    )`
+
+	// Build main query
+	mainQuery := `
+    SELECT 
+        p.id, p.name, p.category_id, p.price, p.description,
+        d.name AS discount_name, d.discount, 
+        COALESCE(SUM(po.qty), 0) AS total_order, 
+        COALESCE(json_agg(pi.path) FILTER (WHERE pi.path IS NOT NULL), '[]'::json) AS images, 
+        COUNT(r.*) AS total_ratings,
+        c.name AS category_name,
+        ps.total_filtered
+    FROM filtered_products fp
+    JOIN products p ON p.id = fp.id
+    LEFT JOIN product_discounts pd ON pd.product_id = p.id
+    LEFT JOIN discounts d ON d.id = pd.discount_id
+    LEFT JOIN products_orders po ON po.product_id = p.id
+    LEFT JOIN product_images pi ON pi.product_id = p.id
+    LEFT JOIN ratings r ON r.product_id = p.id
+    JOIN categories c ON c.id = p.category_id
+    CROSS JOIN product_stats ps
+    GROUP BY p.id, d.id, c.name, ps.total_filtered`
+
+	// Tambahkan ORDER BY
 	switch params.Options {
 	case "oldest":
-		query += "p.price DESC"
+		mainQuery += " ORDER BY p.created_at ASC"
 	case "asc":
-		query += "total_order DESC"
+		mainQuery += " ORDER BY p.name ASC"
 	case "desc":
-		query += "average_rating DESC"
+		mainQuery += " ORDER BY p.name DESC"
 	case "cheapest":
-		query += "average_rating DESC"
+		mainQuery += " ORDER BY p.price ASC"
 	case "favorite":
-		query += "average_rating DESC"
+		mainQuery += " ORDER BY po.qty DESC"
 	default:
-		query += "p.price ASC"
+		mainQuery += " ORDER BY p.created_at DESC"
 	}
-	query += ` LIMIT $1 OFFSET $2`
 
-	rows, err := r.DB.Query(c, query, args...)
-	log.Println("[DEBUG QUERY]", query)
-	log.Println("[DEBUG PARAMS]", pageSize, offset, params.Min, params.Max)
+	// Tambahkan LIMIT dan OFFSET
+	mainQuery += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argIndex, argIndex+1)
+	args = append(args, pageSize, offset)
+
+	// Gabungkan query lengkap
+	fullQuery := cteQuery + mainQuery
+
+	// Eksekusi query
+	rows, err := r.DB.Query(c, fullQuery, args...)
 	if err != nil {
-		log.Println("[debug query 1]")
-		return nil, err
+		return nil, fmt.Errorf("error executing query: %w", err)
 	}
+	defer rows.Close()
+
 	var products models.Products
+	var totalFiltered int
+
 	for rows.Next() {
 		var product models.Product
-		log.Println("[DEBUG DISCOUNT NAME]", product.DiscountName)
+		var imagesJSON []byte
+		var discountName sql.NullString
+		var discount sql.NullFloat64
+
 		err := rows.Scan(
 			&product.ID,
 			&product.Name,
 			&product.CategoryID,
 			&product.Price,
 			&product.Description,
-			&product.DiscountName,
-			&product.Discount,
+			&discountName,
+			&discount,
 			&product.TotalOrder,
-			&product.Images,
+			&imagesJSON,
 			&product.TotalRatings,
 			&product.CategoryName,
+			&totalFiltered,
 		)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("error scanning row: %w", err)
 		}
+
+		// Handle NULL values
+		if discountName.Valid {
+			product.DiscountName = &discountName.String
+		}
+		if discount.Valid {
+			product.Discount = &discount.Float64
+		}
+
+		// Parse JSON images
+		if err := json.Unmarshal(imagesJSON, &product.Images); err != nil {
+			return nil, fmt.Errorf("error parsing images JSON: %w", err)
+		}
+
 		products = append(products, product)
 	}
+
 	if err := rows.Err(); err != nil {
-		log.Println("[debug query 2]")
-
-		return nil, err
+		return nil, fmt.Errorf("error after row iteration: %w", err)
 	}
 
-	countQuery := `SELECT COUNT(DISTINCT p.id) FROM products p LEFT JOIN product_discounts pd ON pd.product_id = p.id LEFT JOIN discounts d ON d.id = pd.discount_id JOIN categories c ON c.id = p.category_id `
-
-	var totalItems int
-	err = r.DB.QueryRow(c, countQuery).Scan(&totalItems)
-	if err != nil {
-		log.Println("[debug err]", err)
-		log.Println("[debug query 3]")
-		return nil, errors.New("failed to count products")
-	}
-
-	log.Println("[total items]", totalItems)
-	totalPages := totalItems / pageSize
-	if totalItems%pageSize > 0 {
+	// Hitung total pages
+	totalPages := totalFiltered / pageSize
+	if totalFiltered%pageSize > 0 {
 		totalPages++
 	}
+
+	// Build pagination links
 	basePath := "/api/product"
 	links := map[string]string{
 		"prev": "",
@@ -148,20 +214,66 @@ func (r *RepoProduct) GetAllProducts(c context.Context, params *models.ProductQu
 		links["next"] = fmt.Sprintf("%s?page=%d", basePath, params.Page+1)
 	}
 
-	log.Println("[total page]", totalPages)
 	response := &models.PaginatedResponse{
 		Data: products,
 		Pagination: models.Pagination{
 			Page:       params.Page,
 			PageSize:   pageSize,
-			TotalItems: totalItems,
+			TotalItems: totalFiltered,
 			TotalPages: totalPages,
-			Link:       links,
+			Links:      links,
 		},
 	}
+
 	return response, nil
 }
 
-func (r *RepoProduct) GetDetailProduct() {
+func (r *RepoProduct) GetDetailProduct(c context.Context, id string) (*models.Product, error) {
+	query := `
+		SELECT p.id, p.name, p.category_id, p.price, p.description,
+			d.name AS discount_name, d.discount, 
+			(
+  			  SELECT SUM(po.qty)
+  			  FROM products_orders po
+  			  JOIN orders o ON o.id = po.order_id
+  			  WHERE po.product_id = p.id
+  			) AS total_order,
+  			(
+  			  SELECT json_agg(pi.path)
+  			  FROM product_images pi
+  			  WHERE pi.product_id = p.id
+  			) AS images,
+  			(
+  			  SELECT COUNT(*)
+  			  FROM ratings r
+  			  WHERE r.product_id = p.id AND r.rating = TRUE
+  			) AS total_ratings
+		FROM products p
+		LEFT JOIN product_discounts pd ON pd.product_id = p.id
+		LEFT JOIN discounts d ON d.id = pd.discount_id
+		JOIN categories c ON c.id = p.category_id
+		WHERE p.id = $1`
+
+	var detail models.Product
+	err := r.DB.QueryRow(c, query, id).Scan(
+		&detail.ID,
+		&detail.Name,
+		&detail.CategoryID,
+		&detail.Price,
+		&detail.Description,
+		&detail.DiscountName,
+		&detail.Discount,
+		&detail.TotalOrder,
+		&detail.Images,
+		&detail.TotalRatings,
+	)
+
+	if err != nil {
+		return &models.Product{}, err
+	}
+	return &detail, nil
+}
+
+func (r *RepoProduct) GetRecomendation() {
 
 }

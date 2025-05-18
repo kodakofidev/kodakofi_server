@@ -15,17 +15,17 @@ func (a *Middleware) VerifyToken(ctx *gin.Context) {
 	var err error
 
 	if bearerToken == "" {
-		responder.Unauthorized("Unauthorized", err.Error())
+		responder.Unauthorized("Unauthorized", err)
 		return
 	}
 
 	if !strings.HasPrefix(bearerToken, "Bearer ") {
-		responder.Unauthorized("Unauthorized", err.Error())
+		responder.Unauthorized("Unauthorized", err)
 		return
 	}
 	token := strings.Split(bearerToken, " ")[1]
 	if token == "" {
-		responder.Unauthorized("Unauthorized", err.Error())
+		responder.Unauthorized("Unauthorized", err)
 		return
 	}
 	payloads := &pkg.Claims{}

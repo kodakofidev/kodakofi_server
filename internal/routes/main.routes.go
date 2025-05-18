@@ -11,9 +11,9 @@ func InitRouter(db *pgxpool.Pool) *gin.Engine {
 	middlewares := middlewares.InitMiddleware()
 	rg := router.Group("/api")
 	auth(rg, db)
-	orders(rg, db)
+	// orders(rg, db)
 	profile(rg, db, middlewares)
 	product(rg, db)
-
+	order(rg, db, middlewares)
 	return router
 }

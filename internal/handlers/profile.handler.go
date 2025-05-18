@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"mime/multipart"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -54,16 +55,16 @@ func (h *ProfileHandlers) EditProfileHandler(ctx *gin.Context) {
 	var err error
 
 	if !exists {
-		responder.Unauthorized("authentication required", err.Error())
+		responder.Unauthorized("authentication required", err)
 		return
 	}
 
 	claims, ok := rawClaims.(*pkg.Claims)
-	if !ok || claims == nil || claims.ID == "" {
-		responder.Unauthorized("invalid authentication claims", err.Error())
+	if !ok || claims == nil || claims.Uuid == "" {
+		responder.Unauthorized("invalid authentication claims", "Missing or invalid JWT claims")
 		return
 	}
-	userId := claims.ID
+	userId := claims.Uuid
 
 	var formBody models.ProfileForm
 	if err := ctx.ShouldBind(&formBody); err != nil {
@@ -79,9 +80,11 @@ func (h *ProfileHandlers) EditProfileHandler(ctx *gin.Context) {
 			return
 		}
 
-		log.Println(filename)
+		log.Println("[DEBUG] FILE NAME CHECK", filename)
 		profileImageURL = filepath
 	}
+
+	log.Println("[DEBUG] IMAGE URL", profileImageURL)
 
 	result, err := h.repo.EditProfile(ctx.Request.Context(), userId, formBody, profileImageURL)
 	if err != nil {
@@ -94,6 +97,20 @@ func (h *ProfileHandlers) EditProfileHandler(ctx *gin.Context) {
 
 // UPLOAD IMAGE HANDLER
 func (h *ProfileHandlers) handleFileUpload(ctx *gin.Context, file *multipart.FileHeader, userID string) (filename, filePath string, err error) {
+	//First delete any existing profile image for this very user
+	oldFiles, err := filepath.Glob(filepath.Join("public", "img", "*_"+userID+"_profile*"))
+	if err != nil {
+		return "", "", fmt.Errorf("failed to check for existing files: %w", err)
+	}
+
+	for _, oldFile := range oldFiles {
+		if err := os.Remove(oldFile); err != nil {
+			log.Printf("Warning: failed to delete old file %s: %v", oldFile, err)
+		}
+	}
+
+	//GENERATE FILE NAME AND ADDING PATH
+
 	ext := filepath.Ext(file.Filename)
 	filename = fmt.Sprintf("%d_%s_profile%s", time.Now().UnixNano(), userID, ext)
 	filePath = filepath.Join("public", "img", filename)

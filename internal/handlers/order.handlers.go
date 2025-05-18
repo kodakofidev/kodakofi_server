@@ -19,7 +19,22 @@ func NewOrder(repo repositories.OrderRepoInterface) *OrderHandlers {
 }
 
 func (h *OrderHandlers) PostOrderHandler(ctx *gin.Context) {
+	responder := models.NewResponse(ctx)
 
+	order := models.CreateOrderRequest{}
+
+	if err := ctx.ShouldBindJSON(&order); err != nil {
+		responder.BadRequest("Invalid request payload", err.Error())
+		return
+	}
+
+	createOrder, err := h.repo.CreateOrder(ctx, &order)
+	if err != nil {
+		responder.InternalServerError("Failed to create order", err.Error())
+		return
+	}
+
+	responder.Created("Order created successfully", createOrder)
 }
 
 // handlers get history order
