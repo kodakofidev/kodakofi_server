@@ -20,7 +20,7 @@ type OrderItemResponse struct {
 	ProductID   string `json:"product_id"`
 	ProductName string `json:"product_name"`
 	Qty         int    `json:"qty"`
-	Size        int    `json:"size"`
+	Size        string `json:"size"`
 	IsIced      bool   `json:"is_iced"`
 }
 
