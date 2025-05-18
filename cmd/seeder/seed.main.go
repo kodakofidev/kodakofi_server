@@ -74,5 +74,20 @@ func main() {
 	log.Println("Starting product image seeding...")
 	seed.SeedImage(ctx, db)
 
+	log.Println("Starting discount seeding...")
+	seed.SeedDiscount(ctx, db)
+
+	log.Println("Starting product discount seeding...")
+	seed.SeedProductDiscount(ctx, db)
+
+	log.Println("Starting size seeding...")
+	seed.SeedSize(ctx, db)
+
+	log.Println("Starting size product seeding...")
+	seed.SeedSizeProduct(ctx, db)
+
+	log.Println("Starting product order seeding...")
+	seed.SeedProductOrder(ctx, db)
+
 	log.Println("Seeding completed successfully.")
 }

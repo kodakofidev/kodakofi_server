@@ -47,5 +47,17 @@ func (h *ProductHandlers) FetchDetailProductHandler(ctx *gin.Context) {
 		return
 	}
 
-	response.Success("get product detail success", detail)
+	// Fetch recommended products
+	recommended, err := h.repo.GetRecommendation(ctx.Request.Context(), 9)
+	if err != nil {
+		response.InternalServerError("failed to get recommended products", err.Error())
+		return
+	}
+
+	payload := gin.H{
+		"detail":      detail,
+		"recommended": recommended,
+	}
+
+	response.Success("get product detail with recommendation success", payload)
 }
