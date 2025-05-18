@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS orders (
-  id serial PRIMARY KEY,
+  id serial PRIMARY KEY UNIQUE,
   user_id uuid NOT NULL,
   fullname varchar NOT NULL,
   address varchar NOT NULL,
