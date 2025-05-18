@@ -31,6 +31,8 @@ func main() {
 
 	router := routes.InitRouter(db)
 
+	router.Static("/img", "./public/img")
+
 	router.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"*"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE"},
