@@ -68,7 +68,7 @@ func (p *RepoProfile) EditProfile(ctx context.Context, UserId string, profile mo
 
 	query += " " + strings.Join(clauses, ", ")
 
-	query += fmt.Sprintf(`WHERE user_id = $%d`, len(values)+1)
+	query += fmt.Sprintf(` WHERE user_id = $%d`, len(values)+1)
 	values = append(values, UserId)
 
 	result, err := p.DB.Exec(ctx, query, values...)
