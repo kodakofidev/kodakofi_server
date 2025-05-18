@@ -33,5 +33,19 @@ func (h *ProductHandlers) FetchAllProductsHandler(ctx *gin.Context) {
 }
 
 func (h *ProductHandlers) FetchDetailProductHandler(ctx *gin.Context) {
+	response := models.NewResponse(ctx)
+	var err error
+	if response == nil {
+		response.InternalServerError("internal server error", err.Error())
+		return
+	}
 
+	id := ctx.Param("id")
+	detail, err := h.repo.GetDetailProduct(ctx.Request.Context(), id)
+	if err != nil {
+		response.NotFound("product not available", err.Error())
+		return
+	}
+
+	response.Success("get product detail success", detail)
 }

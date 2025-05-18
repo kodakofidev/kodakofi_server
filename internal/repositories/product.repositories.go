@@ -13,7 +13,7 @@ import (
 
 type ProductRepoInterface interface {
 	GetAllProducts(c context.Context, params *models.ProductQueryParams) (*models.PaginatedResponse, error)
-	GetDetailProduct()
+	GetDetailProduct(c context.Context, id string) (*models.Product, error)
 }
 
 type RepoProduct struct {
@@ -26,7 +26,7 @@ func NewProduct(db *pgxpool.Pool) *RepoProduct {
 
 func (r *RepoProduct) GetAllProducts(c context.Context, params *models.ProductQueryParams) (*models.PaginatedResponse, error) {
 	log.Println(params, "ini params")
-	pageSize := 6
+	const pageSize = 6
 	offset := (params.Page - 1) * pageSize
 	query := ` select p.id, p.name, p.category_id, p.price, p.description,d.name AS discount_name, d.discount, SUM(po.qty) AS total_order, json_agg(pi.path) AS images, COUNT(r.*) AS total_ratings,c.name AS category_name FROM products p LEFT JOIN product_discounts pd ON pd.product_id = p.id LEFT JOIN discounts d ON d.id = pd.discount_id LEFT JOIN products_orders po ON po.product_id = p.id LEFT JOIN orders o ON o.id = po.order_id LEFT JOIN product_images pi ON pi.product_id = p.id LEFT JOIN ratings r ON r.product_id = p.id JOIN categories c ON c.id = p.category_id `
 	var whereClauses []string
@@ -119,7 +119,7 @@ func (r *RepoProduct) GetAllProducts(c context.Context, params *models.ProductQu
 		return nil, err
 	}
 
-	countQuery := `SELECT COUNT(DISTINCT p.id) FROM products p LEFT JOIN product_discounts pd ON pd.product_id = p.id LEFT JOIN discounts d ON d.id = pd.discount_id JOIN categories c ON c.id = p.category_id `
+	countQuery := `SELECT COUNT(DISTINCT p.id) FROM products p LEFT JOIN product_discounts pd ON pd.product_id = p.id LEFT JOIN discounts d ON d.id = pd.discount_id JOIN categories c ON c.id = p.category_id`
 
 	var totalItems int
 	err = r.DB.QueryRow(c, countQuery).Scan(&totalItems)
@@ -129,26 +129,10 @@ func (r *RepoProduct) GetAllProducts(c context.Context, params *models.ProductQu
 		return nil, errors.New("failed to count products")
 	}
 
-	log.Println("[total items]", totalItems)
 	totalPages := totalItems / pageSize
 	if totalItems%pageSize > 0 {
 		totalPages++
 	}
-	basePath := "/api/product"
-	links := map[string]string{
-		"prev": "",
-		"next": "",
-	}
-
-	if params.Page > 1 {
-		links["prev"] = fmt.Sprintf("%s?page=%d", basePath, params.Page-1)
-	}
-
-	if params.Page < totalPages {
-		links["next"] = fmt.Sprintf("%s?page=%d", basePath, params.Page+1)
-	}
-
-	log.Println("[total page]", totalPages)
 	response := &models.PaginatedResponse{
 		Data: products,
 		Pagination: models.Pagination{
@@ -156,12 +140,57 @@ func (r *RepoProduct) GetAllProducts(c context.Context, params *models.ProductQu
 			PageSize:   pageSize,
 			TotalItems: totalItems,
 			TotalPages: totalPages,
-			Link:       links,
 		},
 	}
 	return response, nil
 }
 
-func (r *RepoProduct) GetDetailProduct() {
+func (r *RepoProduct) GetDetailProduct(c context.Context, id string) (*models.Product, error) {
+	query := `
+		SELECT p.id, p.name, p.category_id, p.price, p.description,
+			d.name AS discount_name, d.discount, 
+			(
+  			  SELECT SUM(po.qty)
+  			  FROM products_orders po
+  			  JOIN orders o ON o.id = po.order_id
+  			  WHERE po.product_id = p.id
+  			) AS total_order,
+  			(
+  			  SELECT json_agg(pi.path)
+  			  FROM product_images pi
+  			  WHERE pi.product_id = p.id
+  			) AS images,
+  			(
+  			  SELECT COUNT(*)
+  			  FROM ratings r
+  			  WHERE r.product_id = p.id AND r.rating = TRUE
+  			) AS total_ratings
+		FROM products p
+		LEFT JOIN product_discounts pd ON pd.product_id = p.id
+		LEFT JOIN discounts d ON d.id = pd.discount_id
+		JOIN categories c ON c.id = p.category_id
+		WHERE p.id = $1`
+
+	var detail models.Product
+	err := r.DB.QueryRow(c, query, id).Scan(
+		&detail.ID,
+		&detail.Name,
+		&detail.CategoryID,
+		&detail.Price,
+		&detail.Description,
+		&detail.DiscountName,
+		&detail.Discount,
+		&detail.TotalOrder,
+		&detail.Images,
+		&detail.TotalRatings,
+	)
+
+	if err != nil {
+		return &models.Product{}, err
+	}
+	return &detail, nil
+}
+
+func (r *RepoProduct) GetRecomendation() {
 
 }
