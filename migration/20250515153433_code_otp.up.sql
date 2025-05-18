@@ -1,11 +1,12 @@
 CREATE TABLE IF NOT EXISTS code_otp (
-  id serial PRIMARY KEY,
-  user_id uuid NOT NULL,
-  code varchar NOT NULL,
-  type_id int NOT NULL,
-  expired_at timestamptz NOT NULL,
-  created_at timestamptz DEFAULT now() NOT NULL,
-  updated_at timestamptz,
-  CONSTRAINT fk_code_otp_user FOREIGN KEY (user_id) REFERENCES users (id),
-  CONSTRAINT fk_code_otp_type FOREIGN KEY (type_id) REFERENCES otp_type (id)
+  id SERIAL PRIMARY KEY,
+  user_id UUID NOT NULL,
+  code VARCHAR(6) NOT NULL,
+  type_id INT NOT NULL,
+  expired_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ,
+  CONSTRAINT fk_code_otp_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_code_otp_type FOREIGN KEY (type_id) REFERENCES otp_type(id) ON DELETE CASCADE,
+  CONSTRAINT unique_user_type UNIQUE (user_id, type_id)
 );
