@@ -5,10 +5,12 @@ type Pagination struct {
 	PageSize   int               `json:"page_size"`
 	TotalItems int               `json:"total_items"`
 	TotalPages int               `json:"total_pages"`
-	Link       map[string]string `json:"link"`
+	Links      map[string]string `json:"links,omitempty"`
+	HasNext    bool              `json:"has_next"`
+	HasPrev    bool              `json:"has_prev"`
 }
 
 type PaginatedResponse struct {
-	Data       interface{} `json:"data"`
-	Pagination Pagination  `json:"pagination"`
+	Data       Products   `json:"data"`
+	Pagination Pagination `json:"pagination"`
 }
