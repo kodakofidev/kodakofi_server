@@ -31,7 +31,7 @@ func main() {
 
 	router := routes.InitRouter(db)
 
-	router.Static("/img", "./public/img")
+	router.Static("/profile-images", "./public/profile-images")
 	router.Static("/public", "./public")
 
 	router.Use(cors.New(cors.Config{
