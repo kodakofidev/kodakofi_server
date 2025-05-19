@@ -17,6 +17,7 @@ type AuthRepoInterface interface {
 	StoreOTP(c context.Context, userID string, otp string, typeID int, expiry time.Time) error
 	VerifyOTP(c context.Context, email string, otp string, typeID int) (bool, error) // Added typeID parameter
 	UpdateUserVerificationStatus(c context.Context, userID string) error
+	UpdateUserPassword(c context.Context, userID string, hashedPassword string) error // Added this method
 }
 
 type RepoAuth struct {
@@ -126,6 +127,12 @@ func (r *RepoAuth) VerifyOTP(c context.Context, email string, otp string, typeID
 func (r *RepoAuth) UpdateUserVerificationStatus(c context.Context, userID string) error {
 	query := `UPDATE users SET is_verified = true WHERE id = $1`
 	_, err := r.DB.Exec(c, query, userID)
+	return err
+}
+
+func (r *RepoAuth) UpdateUserPassword(c context.Context, userID string, hashedPassword string) error {
+	query := `UPDATE users SET password = $1, updated_at = NOW() WHERE id = $2`
+	_, err := r.DB.Exec(c, query, hashedPassword, userID)
 	return err
 }
 
