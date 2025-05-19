@@ -29,7 +29,7 @@ func (h *ProfileHandlers) FetchProfileHandler(ctx *gin.Context) {
 	var err error
 
 	if !exists {
-		responder.Unauthorized("authentication required", err.Error())
+		responder.Unauthorized("authentication required", any(err))
 		return
 	}
 
@@ -120,6 +120,5 @@ func (h *ProfileHandlers) handleFileUpload(ctx *gin.Context, file *multipart.Fil
 		return "", "", fmt.Errorf("failed to save file: %w", err)
 	}
 
-	// Return URL path instead of filesystem path
-	return filename, "/profile-images/" + filename, nil
+	return filename, filename, nil
 }

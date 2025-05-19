@@ -16,6 +16,7 @@ func auth(r *gin.RouterGroup, db *pgxpool.Pool) {
 	auth.POST("/new", handlers.Register)
 	auth.POST("/verify", handlers.VerifyEmail)
 	auth.POST("/otp", handlers.SendOTP)
+	auth.POST("/reset-password", handlers.ResetPassword)
 
 	// OAuth routes with explicit provider mapping
 	auth.GET("/google", handlers.GoogleLogin)
