@@ -26,6 +26,7 @@ func NewProduct(repo repositories.ProductRepoInterface) *ProductHandlers {
 func (h *ProductHandlers) FetchAllProductsHandler(ctx *gin.Context) {
 	var params models.ProductQueryParams
 	response := models.NewResponse(ctx)
+
 	if err := ctx.ShouldBindQuery(&params); err != nil {
 		response.BadRequest("params invalid", err.Error())
 		return
@@ -35,6 +36,7 @@ func (h *ProductHandlers) FetchAllProductsHandler(ctx *gin.Context) {
 		response.InternalServerError("internal server errors", err.Error())
 		return
 	}
+
 	response.Success("get products success", res)
 }
 
