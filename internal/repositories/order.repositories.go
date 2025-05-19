@@ -143,9 +143,9 @@ func (r *RepoOrder) CreateOrder(ctx context.Context, data *models.CreateOrderReq
 
 		// 4d. Insert ke products_orders
 		_, err = tx.Exec(ctx, `
-			INSERT INTO products_orders (order_id, product_id, base_price, size, qty, added_price, sub_total)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-			orderID, item.ProductID, int(basePrice), sizeName, item.Qty, int(basePrice*addedPrice), subTotal)
+			INSERT INTO products_orders (order_id, product_id, base_price, size, is_iced, qty, added_price, sub_total)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+			orderID, item.ProductID, int(basePrice), sizeName, item.IsIced, item.Qty, int(basePrice*addedPrice), subTotal)
 		if err != nil {
 			return nil, fmt.Errorf("failed to insert product_order: %w", err)
 		}
@@ -192,9 +192,9 @@ func (r *RepoOrder) CreateOrder(ctx context.Context, data *models.CreateOrderReq
 			}
 		} else {
 			_, err = tx.Exec(ctx, `
-					INSERT INTO products_orders (order_id, product_id, base_price, size, qty, added_price, sub_total)
-					VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-				orderID, iceCubeID, int(iceCubePrice), "Not Drink", iceCubeQtyTotal, 0, iceTotal)
+					INSERT INTO products_orders (order_id, product_id, base_price, size, is_iced, qty, added_price, sub_total)
+					VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+				orderID, iceCubeID, int(iceCubePrice), "Not Drink", false, iceCubeQtyTotal, 0, iceTotal)
 			if err != nil {
 				return nil, fmt.Errorf("failed to insert ice cube order: %w", err)
 			}
@@ -257,7 +257,6 @@ func (r *RepoOrder) GetHistoryOrders(ctx context.Context, offset int, status, us
 
 	query := "select t.transaction_code, o.created_at, t.total_amount, o.id, s.status from orders o join transactions t on o.id = t.order_id join status s on s.id = o.status_id where o.user_id = $1 "
 
-
 	value := []interface{}{userId}
 	valueIndex := 2
 
@@ -277,7 +276,7 @@ func (r *RepoOrder) GetHistoryOrders(ctx context.Context, offset int, status, us
 		log.Println(err.Error())
 		return nil, err
 	}
-	
+
 	defer rows.Close()
 	var result models.OrderHistories
 
