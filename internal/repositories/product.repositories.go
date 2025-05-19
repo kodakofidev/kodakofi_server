@@ -4,7 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -15,6 +17,7 @@ type ProductRepoInterface interface {
 	GetAllProducts(c context.Context, params *models.ProductQueryParams) (*models.PaginatedResponse, error)
 	GetDetailProduct(c context.Context, id string) (*models.Product, error)
 	GetRecommendation(c context.Context, limit int) (models.Products, error)
+	AddProduct(c context.Context, newProduct *models.ProductRequest, images []string) error
 }
 
 type RepoProduct struct {
@@ -321,9 +324,10 @@ func (r *RepoProduct) GetRecommendation(c context.Context, limit int) (models.Pr
 
 	return products, nil
 }
-func (r *RepoProduct) AddProduct(c context.Context, params *models.ProductRequest, listImage []string) error {
+func (r *RepoProduct) AddProduct(c context.Context, newProduct *models.ProductRequest, listImage []string) error {
 	tx, err := r.DB.Begin(c)
 	if err != nil {
+		log.Println("[DEBUG 1]", err)
 		return err
 	}
 
@@ -332,11 +336,65 @@ func (r *RepoProduct) AddProduct(c context.Context, params *models.ProductReques
 			tx.Rollback(c)
 		}
 	}()
+	query := `insert into products (name, category_id, price,description) values ($1, $2,$3,$4) returning id`
+	var productID models.ProductRequest
+	values := []any{newProduct.Name, newProduct.CategoryID, newProduct.Price, newProduct.Description}
+	log.Println("[DEBUG LENGTH]", len(newProduct.Size))
+	if len(newProduct.Size) == 0 {
+		newProduct.Size = append(newProduct.Size, 4)
+	}
+	err = tx.QueryRow(c, query, values...).Scan(&productID.Id)
+	log.Println("[DEBUG ID]", productID.Id)
+	if err != nil {
+		log.Println("[ERR ]", err)
+	}
+	log.Println("[ID]", productID)
+	querySize := `insert into size_products (product_id, stock,size_id) values`
+	valuesSize := []any{productID.Id, newProduct.Stock}
+	log.Println("DEBUG SIZE", newProduct.Size)
+	for i, size := range newProduct.Size {
+		if i > 0 {
+			querySize += ","
+		}
+		querySize += fmt.Sprintf("($1, $2,$%d)", i+3)
+		valuesSize = append(valuesSize, size)
+	}
+	log.Println("[valuessize]", valuesSize)
+	cmd, err := tx.Exec(c, querySize, valuesSize...)
+	if err != nil {
+		log.Println("[DEBUG 2]", err)
+		return errors.New("add product failed")
+	}
+	row := cmd.RowsAffected()
+	if row == 0 {
+		return errors.New("add product failed ")
+	}
 
-	query := `select into products (name, category_id, stock) values ($1, $2,$3) returning id`
-	var resultId models.ProductRequest
-	values := []any{params.Name, params.CategoryID, params.Stock}
-	err = tx.QueryRow(c, query, values...).Scan(&resultId.Id)
+	queryImage := `insert into product_images (product_id, path) values`
+	valuesImage := []any{productID.Id}
+	for i, image := range listImage {
+		if i > 0 {
+			queryImage += ","
+		}
+		queryImage += fmt.Sprintf("($1,$%d)", i+2)
+		valuesImage = append(valuesImage, image)
+	}
+	log.Println("[DEBUG 2]", queryImage)
+
+	cmd, err = tx.Exec(c, queryImage, valuesImage...)
+
+	if err != nil {
+		log.Println("[DEBUG 3]", err)
+
+		return errors.New("add path image failed")
+	}
+	row = cmd.RowsAffected()
+	if row == 0 {
+		return errors.New("add path image failed")
+	}
+	if err := tx.Commit(c); err != nil {
+		return err
+	}
 
 	return nil
 }

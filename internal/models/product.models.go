@@ -28,11 +28,11 @@ type ProductQueryParams struct {
 }
 
 type ProductRequest struct {
-	Id          string  `form:"id,omitempty" db:"id"`
-	Name        string  `form:"name"`
-	Price       float64 `form:"price" `
-	Description string  `form:"description"`
-	Stock       int     `form:"stock" `
-	CategoryID  int     `form:"category_id" `
-	Size        []int   `form:"category_id" `
+	Id          string  `json:"id" form:"id,omitempty" db:"id"`
+	Name        string  `json:"name" form:"name"`
+	Price       float64 `json:"price" form:"price" `
+	Description string  `json:"description" form:"description"`
+	Stock       int     `json:"stock" form:"stock" `
+	CategoryID  int     `json:"category_id" form:"category_id" `
+	Size        []int   `json:"size" form:"size" `
 }

@@ -29,7 +29,6 @@ func (h *ProductHandlers) FetchAllProductsHandler(ctx *gin.Context) {
 		response.BadRequest("params invalid", err.Error())
 		return
 	}
-	log.Println("[debug query params]", params)
 	res, err := h.repo.GetAllProducts(ctx.Request.Context(), &params)
 	if err != nil {
 		response.InternalServerError("internal server errors", err.Error())
@@ -69,7 +68,9 @@ func (h *ProductHandlers) FetchDetailProductHandler(ctx *gin.Context) {
 }
 
 func (h *ProductHandlers) AddProduct(ctx *gin.Context) {
+	response := models.NewResponse(ctx)
 	var formBody models.ProductRequest
+	log.Println("[DEBUG]", formBody.Size)
 	if err := ctx.ShouldBind(&formBody); err != nil {
 		log.Println("Binding error:", err.Error())
 		ctx.JSON(http.StatusBadRequest, gin.H{
@@ -78,6 +79,7 @@ func (h *ProductHandlers) AddProduct(ctx *gin.Context) {
 		})
 		return
 	}
+	log.Println("[DEBUG FORM BODY]", formBody)
 
 	// Get multipart form
 	form, err := ctx.MultipartForm()
@@ -99,7 +101,7 @@ func (h *ProductHandlers) AddProduct(ctx *gin.Context) {
 		return
 	}
 
-	var imagename []string
+	var imagesname []string
 	for _, file := range imageFiles {
 		// Validate image file
 		if !isImage(file) {
@@ -113,16 +115,23 @@ func (h *ProductHandlers) AddProduct(ctx *gin.Context) {
 			continue
 		}
 
-		imagename = append(imagename, filename)
+		imagesname = append(imagesname, filename)
 	}
 
-	if len(imagename) == 0 {
+	if len(imagesname) == 0 {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"message": "No valid images were uploaded",
 		})
 		return
 	}
-	log.Println(imagename)
+	errQuery := h.repo.AddProduct(ctx.Request.Context(), &formBody, imagesname)
+	if errQuery != nil {
+		response.InternalServerError("internal server errors", errQuery)
+		return
+	}
+	response.Success("Add products success", gin.H{
+		"name": formBody.Name,
+	})
 }
 
 func isImage(file *multipart.FileHeader) bool {
@@ -142,7 +151,7 @@ func fileHandling(ctx *gin.Context, file *multipart.FileHeader) (filename, filep
 	log.Println("[DEBUG ext]", ext)
 	filename = fmt.Sprintf("%d_product%s", time.Now().UnixNano(), ext)
 	log.Println("[DEBUG FILE NAME]", filename)
-	filepath = fp.Join("public", "img", "product", filename)
+	filepath = fp.Join("public", "product-image", filename)
 
 	if err := os.MkdirAll(fp.Dir(filepath), 0755); err != nil {
 		return "", "", fmt.Errorf("failed to create directory: %v", err)
