@@ -3,10 +3,11 @@ CREATE TABLE IF NOT EXISTS products_orders (
   product_id uuid NOT NULL,
   base_price int not null,
   size varchar NOT NULL,
+  is_iced bool not null,
   qty int NOT NULL,
   added_price int not null,
   sub_total int not null,
-  CONSTRAINT products_orders_pk PRIMARY KEY (order_id, product_id, size),
+  CONSTRAINT products_orders_pk PRIMARY KEY (order_id, product_id, size, is_iced),
   CONSTRAINT fk_products_orders_order FOREIGN KEY (order_id) REFERENCES orders (id),
   CONSTRAINT fk_products_orders_product FOREIGN KEY (product_id) REFERENCES products (id)  
 );
