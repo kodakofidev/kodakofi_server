@@ -17,4 +17,6 @@ func profile(r *gin.RouterGroup, db *pgxpool.Pool, mdw *middlewares.Middleware) 
 
 	profile.GET("", mdw.VerifyToken, mdw.AccsessGate("user"), handlers.FetchProfileHandler)
 	profile.PATCH("/edit", mdw.VerifyToken, mdw.AccsessGate("user"), handlers.EditProfileHandler)
+	// profile.PATCH("/edit", handlers.EditProfileHandler)
+
 }
