@@ -81,8 +81,8 @@ func (r *Responder) Forbidden(message string, err interface{}) {
 }
 
 func (r *Responder) NotFound(message string, err interface{}) {
-	r.C.JSON(http.StatusInternalServerError, Response{
-		Status:  http.StatusInternalServerError,
+	r.C.JSON(http.StatusNotFound, Response{
+		Status:  http.StatusNotFound,
 		Message: message,
 		Error:   err,
 	})
