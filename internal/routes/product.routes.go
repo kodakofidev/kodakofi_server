@@ -14,5 +14,10 @@ func product(r *gin.RouterGroup, db *pgxpool.Pool, mdw *middlewares.Middleware) 
 	handlers := handlers.NewProduct(repo)
 	route.GET("", handlers.FetchAllProductsHandler)
 	route.GET("/:id", handlers.FetchDetailProductHandler)
+	route.PATCH("/:id", handlers.UpdateProduct)
+	// routeImg := route.Group("/image")
+	// routeImg.DELETE("/:id", handlers.RemoveImage)
+	// route.POST("", handlers.AddProduct)
+
 	route.POST("", mdw.VerifyToken, mdw.AccsessGate("admin"), handlers.AddProduct)
 }

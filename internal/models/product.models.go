@@ -13,12 +13,17 @@ type Product struct {
 	TotalRatings int           `json:"total_ratings"`
 	CategoryName string        `json:"category_name"`
 	Sizes        []ProductSize `json:"size,omitempty"`
+	Size         []SizesRes    `json:"sizeRes,omitempty"`
 }
 
 type ProductSize struct {
 	ID    int    `json:"id"`
 	Name  string `json:"size"`
 	Stock int    `json:"stock"`
+}
+type SizesRes struct {
+	ID   int    `json:"id"`
+	Name string `json:"size"`
 }
 
 // Products adalah slice dari Product
@@ -35,11 +40,12 @@ type ProductQueryParams struct {
 }
 
 type ProductRequest struct {
-	Id          string  `json:"id" form:"id,omitempty" db:"id"`
-	Name        string  `json:"name" form:"name"`
-	Price       float64 `json:"price" form:"price" `
-	Description string  `json:"description" form:"description"`
-	Stock       int     `json:"stock" form:"stock" `
-	CategoryID  int     `json:"category_id" form:"category_id" `
-	Size        []int   `json:"size" form:"size" `
+	Id          string   `json:"id" form:"id"  db:"id"`
+	Name        *string  `json:"name" form:"name"`
+	Price       *int     `json:"price" form:"price"`
+	Description *string  `json:"description" form:"description"`
+	Stock       *int     `json:"stock" form:"stock" `
+	CategoryID  *int     `json:"category_id" form:"category_id"`
+	Size        []int    `json:"size" form:"size"`
+	KeepImages  []string `json:"keep_images" form:"keep_images" `
 }
