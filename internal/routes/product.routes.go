@@ -14,4 +14,8 @@ func product(r *gin.RouterGroup, db *pgxpool.Pool) {
 	route.GET("", handlers.FetchAllProductsHandler)
 	route.GET("/:id", handlers.FetchDetailProductHandler)
 	route.POST("", handlers.AddProduct)
+	route.PATCH("/:id", handlers.UpdateProduct)
+	// routeImg := route.Group("/image")
+	// routeImg.DELETE("/:id", handlers.RemoveImage)
+
 }
