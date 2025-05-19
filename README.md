@@ -1,4 +1,4 @@
-# ☕️ Koda Kofi
+# ☕ Koda Kofi
 
 ## 📘 Database Setup — Migration & Seeding
 
@@ -9,33 +9,38 @@ Proyek ini menggunakan PostgreSQL untuk manajemen data. Terdapat dua komponen ut
 
 ---
 
-## ⚙️ Prasyarat
+## ⚙ Prasyarat
 
 1. Pastikan sudah ada file `.env` di root project yang berisi:
 
-    ```env
+    ```
     DB_URL=postgres://username:password@localhost:5432/db_name?sslmode=disable
     ```
+    
 
 2. Install CLI `golang-migrate`:
 
-    ### 🛠️ Cara install via `go install` (direkomendasikan)
+    ### 🛠 Cara install via `go install` (direkomendasikan)
 
-    ```bash
+    ```
     go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
     ```
+    
 
     > 🔔 Pastikan `$GOBIN` sudah masuk ke `PATH`. Tambahkan ke `.bashrc` / `.zshrc` jika belum:
 
     bash
 
-    ```bash
+    ```
     export PATH=$PATH:$(go env GOPATH)/bin
     ```
+    
     atau dengan Powershell
+    
     ```
     $env:PATH += ";$(go env GOPATH)\bin"
     ```
+    
 
 
 ---
@@ -51,32 +56,36 @@ migration/
 └── ...
 ```
 
-### 🛠️ Perintah Makefile untuk Migration
+### 🛠 Perintah Makefile untuk Migration
 
 - **Buat file migration baru**:
 
-    ```bash
+    ```
     make migrate-init name=create_table_name
     ```
+    
 
 - **Jalankan seluruh migration ke atas**:
 
-    ```bash
+    ```
     make migrate-up
     ```
+    
 
 - **Rollback migration (turun 1 file)**:
 
-    ```bash
+    ```
     make migrate-down
     ```
+    
     Membatalkan/mengembalikan perubahan migrasi terakhir yang telah diterapkan.
 
 - **Reset status migration (force 0)**:
 
-    ```bash
+    ```
     make migrate-fix
     ```
+    
 
 ---
 
@@ -96,20 +105,19 @@ migration/
 └── status.seed.go
 ```
 
-### ▶️ Jalankan Seeding
+### ▶ Jalankan Seeding
 
 - Gunakan Makefile:
 
-    ```bash
+    ```
     make seed
     ```
+    
 
 - Atau jalankan langsung:
-
-    ```bash
-    go run ./cmd/seeder/seed.main.go
-    ```
-
+    
+    ```go run ./cmd/seeder/seed.main.go```
+    
 Seeder akan mengisi data awal untuk:
 
 - Delivery Methods
@@ -132,9 +140,10 @@ Seeding completed successfully.
 
 ### ✅ Migrate Ulang + Seeding
 
-```bash
+```
 make migrate-reset
 ```
+
 Perintah tersebut akan melakukan migrate ulang sekaligus menjalankan seeding
 
 ---

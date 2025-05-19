@@ -14,6 +14,7 @@ import (
 type ProductRepoInterface interface {
 	GetAllProducts(c context.Context, params *models.ProductQueryParams) (*models.PaginatedResponse, error)
 	GetDetailProduct(c context.Context, id string) (*models.Product, error)
+	GetRecommendation(c context.Context, limit int) (models.Products, error)
 }
 
 type RepoProduct struct {
@@ -231,12 +232,12 @@ func (r *RepoProduct) GetDetailProduct(c context.Context, id string) (*models.Pr
 	query := `
 		SELECT p.id, p.name, p.category_id, p.price, p.description,
 			d.name AS discount_name, d.discount, 
-			(
-  			  SELECT SUM(po.qty)
-  			  FROM products_orders po
-  			  JOIN orders o ON o.id = po.order_id
-  			  WHERE po.product_id = p.id
-  			) AS total_order,
+			COALESCE((
+			  SELECT SUM(po.qty)
+			  FROM products_orders po
+			  JOIN orders o ON o.id = po.order_id
+			  WHERE po.product_id = p.id
+			), 0) AS total_order,
   			(
   			  SELECT json_agg(pi.path)
   			  FROM product_images pi
@@ -273,6 +274,53 @@ func (r *RepoProduct) GetDetailProduct(c context.Context, id string) (*models.Pr
 	return &detail, nil
 }
 
+func (r *RepoProduct) GetRecommendation(c context.Context, limit int) (models.Products, error) {
+	query := `
+		SELECT p.id, p.name, p.price, d.name AS discount_name, d.discount,
+			(
+			  SELECT json_agg(pi.path)
+			  FROM product_images pi
+			  WHERE pi.product_id = p.id
+			) AS images,
+			(
+			  SELECT COUNT(*)
+			  FROM ratings r
+			  WHERE r.product_id = p.id AND r.rating = TRUE
+			) AS total_ratings
+		FROM products p
+		LEFT JOIN product_discounts pd ON pd.product_id = p.id
+		LEFT JOIN discounts d ON d.id = pd.discount_id
+		JOIN categories c ON c.id = p.category_id
+		ORDER BY total_ratings DESC
+		LIMIT $1
+	`
+
+	rows, err := r.DB.Query(c, query, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var products []models.Product
+	for rows.Next() {
+		var p models.Product
+		err := rows.Scan(
+			&p.ID,
+			&p.Name,
+			&p.Price,
+			&p.DiscountName,
+			&p.Discount,
+			&p.Images,
+			&p.TotalRatings,
+		)
+		if err != nil {
+			return nil, err
+		}
+		products = append(products, p)
+	}
+
+	return products, nil
+}
 func (r *RepoProduct) AddProduct(c context.Context, params *models.ProductRequest, listImage []string) error {
 	tx, err := r.DB.Begin(c)
 	if err != nil {

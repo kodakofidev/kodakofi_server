@@ -3,16 +3,20 @@ package repositories
 import (
 	"context"
 	"fmt"
+	"log"
+	"math"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kodakofidev/kodakofi_server/internal/models"
 )
 
 type OrderRepoInterface interface {
 	CreateOrder(ctx context.Context, data *models.CreateOrderRequest) (*models.CreateOrderResponse, error)
+	GetHistoryOrders(ctx context.Context, offset int, status, userId string) (models.OrderHistories, error)
 }
 
 type RepoOrder struct {
@@ -21,6 +25,15 @@ type RepoOrder struct {
 
 func NewOrder(db *pgxpool.Pool) *RepoOrder {
 	return &RepoOrder{DB: db}
+}
+
+func isDrink(ctx context.Context, tx pgx.Tx, productID string) (bool, error) {
+	var categoryID int
+	err := tx.QueryRow(ctx, "SELECT category_id FROM products WHERE id = $1", productID).Scan(&categoryID)
+	if err != nil {
+		return false, err
+	}
+	return categoryID == 1 || categoryID == 2, nil
 }
 
 func (r *RepoOrder) CreateOrder(ctx context.Context, data *models.CreateOrderRequest) (*models.CreateOrderResponse, error) {
@@ -57,8 +70,41 @@ func (r *RepoOrder) CreateOrder(ctx context.Context, data *models.CreateOrderReq
 	total := 0
 	var itemsResponse []models.OrderItemResponse
 
+	// Preload Ice Cube data
+	var iceCubeID string
+	var iceCubePrice float64
+	err = tx.QueryRow(ctx, `
+		SELECT id, price FROM products
+		WHERE category_id = 6 AND name = 'Ice Cube' LIMIT 1`).Scan(&iceCubeID, &iceCubePrice)
+	if err != nil {
+		return nil, fmt.Errorf("ice cube not found: %w", err)
+	}
+
+	iceCubeQtyTotal := 0
+
 	// 4. Handle setiap item
 	for _, item := range data.Items {
+		isDrinkProduct, err := isDrink(ctx, tx, item.ProductID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to check product category: %w", err)
+		}
+
+		if item.SizeID == 0 {
+			if isDrinkProduct {
+				return nil, fmt.Errorf("size_id is required for drink products")
+			} else {
+				item.SizeID = 4
+				item.IsIced = false
+			}
+		}
+
+		// Ambil kategori produk
+		// var categoryID int
+		// err = tx.QueryRow(ctx, "SELECT category_id FROM products WHERE id = $1", item.ProductID).Scan(&categoryID)
+		// if err != nil {
+		// 	return nil, fmt.Errorf("failed to get product category: %w", err)
+		// }
+
 		// 4b. Ambil harga produk dan nama produk
 		var basePrice float64
 		var productName string
@@ -69,15 +115,18 @@ func (r *RepoOrder) CreateOrder(ctx context.Context, data *models.CreateOrderReq
 		}
 
 		// 4a. Ambil size_id dan added_price berdasarkan item.Size
+		// var sizeID int = item.SizeID
+		var sizeName string
 		var addedPrice float64
 
-		err = tx.QueryRow(ctx, "SELECT added_price FROM sizes WHERE id = $1", item.SizeID).Scan(&addedPrice)
+		err = tx.QueryRow(ctx, "SELECT size, added_price FROM sizes WHERE id = $1", item.SizeID).
+			Scan(&sizeName, &addedPrice)
 		if err != nil {
-			return nil, fmt.Errorf("size_id not found: %w", err)
+			return nil, fmt.Errorf("invalid size_id: %w", err)
 		}
 
 		// 4c. Hitung harga total produk
-		subTotal := int((basePrice + (basePrice * addedPrice)) * float64(item.Qty))
+		subTotal := int(math.Round((basePrice + (basePrice * addedPrice)) * float64(item.Qty)))
 		total += subTotal
 
 		// 4c. Update stok size_product
@@ -94,74 +143,62 @@ func (r *RepoOrder) CreateOrder(ctx context.Context, data *models.CreateOrderReq
 
 		// 4d. Insert ke products_orders
 		_, err = tx.Exec(ctx, `
-			INSERT INTO products_orders (order_id, product_id, base_price, qty, added_price, sub_total)
-			VALUES ($1, $2, $3, $4, $5, $6)`,
-			orderID, item.ProductID, int(basePrice), item.Qty, int(basePrice*addedPrice), subTotal)
+			INSERT INTO products_orders (order_id, product_id, base_price, size, qty, added_price, sub_total)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+			orderID, item.ProductID, int(basePrice), sizeName, item.Qty, int(basePrice*addedPrice), subTotal)
 		if err != nil {
 			return nil, fmt.Errorf("failed to insert product_order: %w", err)
 		}
 
-		// 4f. Jika iced, tambahkan Ice Cube
+		// 4f. Jika IsIced, tambahkan Ice Cube
 		if item.IsIced {
-			iceCubeQty := 0
-			var iceCubeID string
-			var iceCubePrice float64
-			if iceCubeID == "" {
-				err = tx.QueryRow(ctx, `
-				SELECT id, price FROM products
-				WHERE category_id = 6 AND name = 'Ice Cube' LIMIT 1`).Scan(&iceCubeID, &iceCubePrice)
-				if err != nil {
-					return nil, fmt.Errorf("ice cube not found: %w", err)
-				}
-			}
-			iceCubeQty += item.Qty
-
-			if iceCubeQty > 0 {
-				// Cek apakah sudah ada Ice Cube di products_orders
-				var exists bool
-				err = tx.QueryRow(ctx, `
-					SELECT EXISTS (
-						SELECT 1 FROM products_orders
-						WHERE order_id = $1 AND product_id = $2
-					)`, orderID, iceCubeID).Scan(&exists)
-				if err != nil {
-					return nil, fmt.Errorf("failed to check existing ice cube order: %w", err)
-				}
-
-				iceTotal := int(iceCubePrice) * item.Qty
-				total += iceTotal
-
-				// Insert Ice Cube ke products_orders
-				if exists {
-					// Update qty dan sub_total
-					_, err = tx.Exec(ctx, `
-					UPDATE products_orders
-					SET qty = qty + $1, sub_total = sub_total + $2
-					WHERE order_id = $3 AND product_id = $4`,
-						iceCubeQty, iceTotal, orderID, iceCubeID)
-					if err != nil {
-						return nil, fmt.Errorf("failed to update ice cube order: %w", err)
-					}
-				} else {
-					// Insert baru
-					_, err = tx.Exec(ctx, `
-					INSERT INTO products_orders (order_id, product_id, base_price, qty, added_price, sub_total)
-					VALUES ($1, $2, $3, $4, $5, $6)`,
-						orderID, iceCubeID, int(iceCubePrice), iceCubeQty, 0, iceTotal)
-					if err != nil {
-						return nil, fmt.Errorf("failed to insert ice cube: %w", err)
-					}
-				}
-			}
+			iceCubeQtyTotal += item.Qty
 		}
 
+		// Tambahkan ke response
 		itemsResponse = append(itemsResponse, models.OrderItemResponse{
 			ProductID:   item.ProductID,
 			ProductName: productName,
 			Qty:         item.Qty,
-			Size:        item.SizeID,
+			Size:        sizeName,
 			IsIced:      item.IsIced,
 		})
+	}
+
+	// Tambahkan Ice Cube ke products_orders jika dibutuhkan
+	if iceCubeQtyTotal > 0 {
+		iceTotal := int(iceCubePrice) * iceCubeQtyTotal
+		total += iceTotal
+
+		// Cek apakah sudah ada Ice Cube di order
+		var exists bool
+		err = tx.QueryRow(ctx, `
+				SELECT EXISTS (
+					SELECT 1 FROM products_orders
+					WHERE order_id = $1 AND product_id = $2
+				)`, orderID, iceCubeID).Scan(&exists)
+		if err != nil {
+			return nil, fmt.Errorf("failed to check ice cube order: %w", err)
+		}
+
+		if exists {
+			_, err = tx.Exec(ctx, `
+				UPDATE products_orders
+				SET qty = qty + $1, sub_total = sub_total + $2
+				WHERE order_id = $3 AND product_id = $4`,
+				iceCubeQtyTotal, iceTotal, orderID, iceCubeID)
+			if err != nil {
+				return nil, fmt.Errorf("failed to update ice cube order: %w", err)
+			}
+		} else {
+			_, err = tx.Exec(ctx, `
+					INSERT INTO products_orders (order_id, product_id, base_price, size, qty, added_price, sub_total)
+					VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+				orderID, iceCubeID, int(iceCubePrice), "Not Drink", iceCubeQtyTotal, 0, iceTotal)
+			if err != nil {
+				return nil, fmt.Errorf("failed to insert ice cube order: %w", err)
+			}
+		}
 	}
 
 	// 5. Hitung tax 12% dan total_amount
@@ -172,20 +209,21 @@ func (r *RepoOrder) CreateOrder(ctx context.Context, data *models.CreateOrderReq
 	}
 
 	tax := int(float64(total) * taxRate)
-	totalAmount := total + tax
 
 	var deliveryFee int
 	err = tx.QueryRow(ctx, `SELECT fee FROM delivery_methods WHERE id = $1`, data.DeliveryMethodID).Scan(&deliveryFee)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get delivery fee: %w", err)
 	}
-	totalAmount += deliveryFee
 
+	totalAmount := total + tax + deliveryFee
+
+	// Generate Transactions Code
 	now := time.Now()
 	dateTimeStr := now.Format("20060102150405")
 	uuidStr := strings.ToUpper(strings.ReplaceAll(uuid.New().String(), "-", "")[:8])
-
 	transactionCode := fmt.Sprintf("TRX%s%s", dateTimeStr, uuidStr)
+
 	_, err = tx.Exec(ctx, `
 		INSERT INTO transactions (transaction_code, order_id, total, tax, delivery_fee, total_amount)
 		VALUES ($1, $2, $3, $4, $5, $6)`,
@@ -207,8 +245,49 @@ func (r *RepoOrder) CreateOrder(ctx context.Context, data *models.CreateOrderReq
 		PaymentMethod:  data.PaymentMethodID,
 		Items:          itemsResponse,
 		DeliveryFee:    deliveryFee,
-		Tax:            tax,
 		Total:          total,
+		Tax:            tax,
 		TotalAmount:    totalAmount,
 	}, nil
+
+}
+
+// repo get history orders
+func (r *RepoOrder) GetHistoryOrders(ctx context.Context, offset int, status, userId string) (models.OrderHistories, error) {
+
+	query := "select t.transaction_code, o.created_at, t.total_amount, o.id, s.status from orders o join transactions t on o.id = t.order_id join status s on s.id = o.status_id where o.user_id = $1 "
+
+
+	value := []interface{}{userId}
+	valueIndex := 2
+
+	if status != "" {
+		query += fmt.Sprintf(" and s.status = $%d", valueIndex)
+		value = append(value, status)
+		valueIndex++
+	}
+
+	if offset != -1 {
+		query += fmt.Sprintf(" limit 4 offset $%d", valueIndex)
+		value = append(value, offset)
+	}
+
+	rows, err := r.DB.Query(ctx, query, value...)
+	if err != nil {
+		log.Println(err.Error())
+		return nil, err
+	}
+	
+	defer rows.Close()
+	var result models.OrderHistories
+
+	for rows.Next() {
+		var history models.OrderHistory
+		if err := rows.Scan(&history.TransactionCode, &history.Date, &history.GrandTotal, &history.OrderId, &history.Status); err != nil {
+			log.Println(err.Error())
+			return nil, err
+		}
+		result = append(result, history)
+	}
+	return result, nil
 }
