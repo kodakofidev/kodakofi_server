@@ -9,7 +9,7 @@ type OrderItem struct {
 	IsIced    bool   `json:"is_iced"`
 }
 
-type OrderHistory struct {   
+type OrderHistory struct {
 	TransactionCode string    `json:"transaction_code"`
 	Date            time.Time `json:"date"`
 	GrandTotal      int       `json:"grand_total"`
@@ -17,7 +17,7 @@ type OrderHistory struct {
 	Status          string    `json:"status"`
 }
 
-type OrderHistories []OrderHistory 
+// type OrderHistories []OrderHistory
 
 type CreateOrderRequest struct {
 	Email            string      `json:"email"`
