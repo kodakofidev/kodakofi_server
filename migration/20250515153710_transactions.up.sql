@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS transactions (
   transaction_code varchar PRIMARY KEY UNIQUE,
-  order_id int NOT NULL,
+  order_id int NOT NULL UNIQUE,
   total int NOT NULL,
   delivery_fee int NOT NULL,
   tax int NOT null,

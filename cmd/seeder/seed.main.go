@@ -56,29 +56,29 @@ func main() {
 	log.Println("Starting status seeding...")
 	seed.SeedStatus(ctx, db)
 
-	// log.Println("Starting orders seeding...")
-	// seed.SeedOrders(ctx, db)
+	log.Println("Starting orders seeding...")
+	seed.SeedOrders(ctx, db)
 
-	// log.Println("Starting transactions seeding...")
-	// seed.SeedTrasnsactions(ctx, db)
+	log.Println("Starting transactions seeding...")
+	seed.SeedTrasnsactions(ctx, db)
 
-	// log.Println("Starting products_orders seeding...")
-	// seed.SeedPrductsOrders(ctx, db)
+	log.Println("Starting products_orders seeding...")
+	seed.SeedPrductsOrders(ctx, db)
 
 	log.Println("Starting tax seeding...")
 	seed.SeedTax(ctx, db)
 
-	log.Println("Starting products rating seeding...")
-	seed.SeedRating(ctx, db)
+	log.Println("Starting products ratings seeding...")
+	seed.SeedRatings(ctx, db)
 
 	// log.Println("Starting product image seeding...")
 	// seed.SeedImage(ctx, db)
 
-	log.Println("Starting discount seeding...")
-	seed.SeedDiscount(ctx, db)
+	log.Println("Starting discounts seeding...")
+	seed.SeedDiscounts(ctx, db)
 
 	log.Println("Starting product discount seeding...")
-	seed.SeedProductDiscount(ctx, db)
+	seed.SeedProductDiscounts(ctx, db)
 
 	log.Println("Seeding completed successfully.")
 }
