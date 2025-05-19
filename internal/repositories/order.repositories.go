@@ -255,7 +255,8 @@ func (r *RepoOrder) CreateOrder(ctx context.Context, data *models.CreateOrderReq
 // repo get history orders
 func (r *RepoOrder) GetHistoryOrders(ctx context.Context, offset int, status, userId string) ([]models.OrderHistory, error) {
 
-	query := "select t.transaction_code, o.created_at, t.total_amount, o.id, s.status from orders o join transactions t on o.id = t.order_id join status s on s.id = o.status_id where o.user_id = $1 "
+	// query := "select t.transaction_code, o.created_at, t.total_amount, o.id, s.status from orders o join transactions t on o.id = t.order_id join status s on s.id = o.status_id where o.user_id = $1 "
+	query := `select DISTINCT ON (o.id) t.transaction_code, o.created_at, t.total_amount, o.id AS order_id, s.status, pi2."path" FROM orders o LEFT JOIN transactions t ON o.id = t.order_id left JOIN status s ON s.id = o.status_id LEFT JOIN products_orders po ON po.order_id = o.id left JOIN product_images pi2 ON pi2.product_id = po.product_id WHERE o.user_id = $1`
 
 	value := []interface{}{userId}
 	valueIndex := 2
@@ -282,7 +283,7 @@ func (r *RepoOrder) GetHistoryOrders(ctx context.Context, offset int, status, us
 
 	for rows.Next() {
 		var history models.OrderHistory
-		if err := rows.Scan(&history.TransactionCode, &history.Date, &history.GrandTotal, &history.OrderId, &history.Status); err != nil {
+		if err := rows.Scan(&history.TransactionCode, &history.Date, &history.GrandTotal, &history.OrderId, &history.Status, &history.Path); err != nil {
 			log.Println(err.Error())
 			return nil, err
 		}
@@ -290,3 +291,5 @@ func (r *RepoOrder) GetHistoryOrders(ctx context.Context, offset int, status, us
 	}
 	return result, nil
 }
+
+
