@@ -115,7 +115,6 @@ func (r *RepoProduct) GetAllProducts(c context.Context, params *models.ProductQu
     JOIN categories c ON c.id = p.category_id
     CROSS JOIN product_stats ps
     GROUP BY p.id, d.id, c.name, ps.total_filtered`
-
 	// Tambahkan ORDER BY
 	switch params.Options {
 	case "oldest":
@@ -274,6 +273,22 @@ func (r *RepoProduct) GetDetailProduct(c context.Context, id string) (*models.Pr
 	return &detail, nil
 }
 
-func (r *RepoProduct) GetRecomendation() {
+func (r *RepoProduct) AddProduct(c context.Context, params *models.ProductRequest, listImage []string) error {
+	tx, err := r.DB.Begin(c)
+	if err != nil {
+		return err
+	}
 
+	func() {
+		if err != nil {
+			tx.Rollback(c)
+		}
+	}()
+
+	query := `select into products (name, category_id, stock) values ($1, $2,$3) returning id`
+	var resultId models.ProductRequest
+	values := []any{params.Name, params.CategoryID, params.Stock}
+	err = tx.QueryRow(c, query, values...).Scan(&resultId.Id)
+
+	return nil
 }
