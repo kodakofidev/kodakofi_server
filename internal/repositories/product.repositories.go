@@ -38,6 +38,195 @@ func (r *RepoProduct) GetAllProducts(c context.Context, params *models.ProductQu
 	}
 	offset := (params.Page - 1) * pageSize
 
+	var whereClauses []string
+	var args []interface{}
+	argIndex := 1
+
+	if params.Min >= 0 || params.Max >= 0 {
+		minPrice := params.Min
+		if minPrice < 0 {
+			minPrice = 0
+		}
+		maxPrice := params.Max
+		if maxPrice <= 0 {
+			maxPrice = 1000000
+		}
+		whereClauses = append(whereClauses, fmt.Sprintf("p.price BETWEEN $%d AND $%d", argIndex, argIndex+1))
+		args = append(args, minPrice, maxPrice)
+		argIndex += 2
+	}
+
+	if params.Search != "" {
+		whereClauses = append(whereClauses, fmt.Sprintf("p.name ILIKE '%%' || $%d || '%%'", argIndex))
+		args = append(args, params.Search)
+		argIndex++
+	}
+
+	if params.Category != "" {
+		whereClauses = append(whereClauses, fmt.Sprintf("c.name = $%d", argIndex))
+		args = append(args, params.Category)
+		argIndex++
+	}
+
+	if params.Discount != "" {
+		whereClauses = append(whereClauses, "d.discount IS NOT NULL")
+	}
+
+	if params.Options == "newest" {
+		whereClauses = append(whereClauses, "p.created_at >= NOW()")
+	}
+
+	whereClauses = append(whereClauses, "p.is_deleted = false")
+
+	cteQuery := `
+	WITH filtered_products AS (
+		SELECT DISTINCT p.id
+		FROM products p
+		LEFT JOIN product_discounts pd ON pd.product_id = p.id 
+		LEFT JOIN discounts d ON d.id = pd.discount_id 
+		JOIN categories c ON c.id = p.category_id`
+
+	if len(whereClauses) > 0 {
+		cteQuery += " WHERE " + strings.Join(whereClauses, " AND ")
+	}
+
+	cteQuery += `
+	),
+	product_stats AS (
+		SELECT COUNT(*) as total_filtered FROM filtered_products
+	)`
+
+	mainQuery := `
+	SELECT 
+		p.id, p.name, p.category_id, p.price, p.description,
+		d.name AS discount_name, d.discount, 
+		COALESCE(SUM(po.qty), 0) AS total_order, 
+		COALESCE(json_agg(DISTINCT jsonb_build_object('id', s.id, 'size', s.size, 'stock', sp.stock)) FILTER (WHERE s.id IS NOT NULL), '[]') AS size,
+		COALESCE(json_agg(DISTINCT pi.path) FILTER (WHERE pi.path IS NOT NULL), '[]') AS images, 
+		COUNT(r.*) AS total_ratings,
+		c.name AS category_name,
+		ps.total_filtered
+	FROM filtered_products fp
+	JOIN products p ON p.id = fp.id
+	LEFT JOIN product_discounts pd ON pd.product_id = p.id
+	LEFT JOIN size_products sp ON sp.product_id = p.id
+	LEFT JOIN sizes s ON s.id = sp.size_id 
+	LEFT JOIN discounts d ON d.id = pd.discount_id
+	LEFT JOIN products_orders po ON po.product_id = p.id
+	LEFT JOIN product_images pi ON pi.product_id = p.id
+	LEFT JOIN ratings r ON r.product_id = p.id
+	JOIN categories c ON c.id = p.category_id
+	CROSS JOIN product_stats ps
+	GROUP BY p.id, d.id, c.name, ps.total_filtered`
+
+	switch params.Options {
+	case "oldest":
+		mainQuery += " ORDER BY p.created_at ASC"
+	case "asc":
+		mainQuery += " ORDER BY p.name ASC"
+	case "desc":
+		mainQuery += " ORDER BY p.name DESC"
+	case "cheapest":
+		mainQuery += " ORDER BY p.price ASC"
+	case "favorite":
+		mainQuery += " ORDER BY total_order DESC"
+	default:
+		mainQuery += " ORDER BY p.created_at DESC"
+	}
+
+	mainQuery += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argIndex, argIndex+1)
+	args = append(args, pageSize, offset)
+
+	fullQuery := cteQuery + mainQuery
+
+	rows, err := r.DB.Query(c, fullQuery, args...)
+	if err != nil {
+		return nil, fmt.Errorf("error executing query: %w", err)
+	}
+	defer rows.Close()
+
+	var products models.Products
+	var totalFiltered int
+
+	for rows.Next() {
+		var product models.Product
+		var imagesJSON []byte
+		var sizesJSON []byte
+		var discountName sql.NullString
+		var discount sql.NullFloat64
+
+		err := rows.Scan(
+			&product.ID,
+			&product.Name,
+			&product.CategoryID,
+			&product.Price,
+			&product.Description,
+			&discountName,
+			&discount,
+			&product.TotalOrder,
+			&sizesJSON,
+			&imagesJSON,
+			&product.TotalRatings,
+			&product.CategoryName,
+			&totalFiltered,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("error scanning row: %w", err)
+		}
+
+		if discountName.Valid {
+			product.DiscountName = &discountName.String
+		}
+		if discount.Valid {
+			product.Discount = &discount.Float64
+		}
+		if err := json.Unmarshal(imagesJSON, &product.Images); err != nil {
+			return nil, fmt.Errorf("error parsing images JSON: %w", err)
+		}
+		if err := json.Unmarshal(sizesJSON, &product.Sizes); err != nil {
+			return nil, fmt.Errorf("error parsing sizes JSON: %w", err)
+		}
+		products = append(products, product)
+	}
+
+	totalPages := totalFiltered / pageSize
+	if totalFiltered%pageSize > 0 {
+		totalPages++
+	}
+
+	basePath := "/api/product"
+	links := map[string]string{
+		"prev": "",
+		"next": "",
+	}
+
+	if params.Page > 1 {
+		links["prev"] = fmt.Sprintf("%s?page=%d", basePath, params.Page-1)
+	}
+	if params.Page < totalPages {
+		links["next"] = fmt.Sprintf("%s?page=%d", basePath, params.Page+1)
+	}
+
+	response := &models.PaginatedResponse{
+		Data: products,
+		Pagination: models.Pagination{
+			Page:       params.Page,
+			PageSize:   pageSize,
+			TotalItems: totalFiltered,
+			TotalPages: totalPages,
+			Links:      links,
+		},
+	}
+	return response, nil
+}
+
+func (r *RepoProduct) GetAllProductss(c context.Context, params *models.ProductQueryParams) (*models.PaginatedResponse, error) {
+	pageSize := 6
+	if params.Page < 1 {
+		params.Page = 1
+	}
+	offset := (params.Page - 1) * pageSize
+
 	// Build WHERE clauses
 	var whereClauses []string
 	var args []interface{}
@@ -114,7 +303,7 @@ func (r *RepoProduct) GetAllProducts(c context.Context, params *models.ProductQu
         p.id, p.name, p.category_id, p.price, p.description,
         d.name AS discount_name, d.discount, 
         COALESCE(SUM(po.qty), 0) AS total_order, 
-		json_agg(json_build_object('id', s.id,'size', s.size)) as size,
+		json_agg(json_build_object('id', s.id,'size', s.size, 'stock',sp.stock)) as size,
         COALESCE(json_agg(distinct(pi.path)) FILTER (WHERE pi.path IS NOT NULL), '[]'::json) AS images, 
         COUNT(r.*) AS total_ratings,
         c.name AS category_name,
@@ -182,7 +371,7 @@ func (r *RepoProduct) GetAllProducts(c context.Context, params *models.ProductQu
 			&discountName,
 			&discount,
 			&product.TotalOrder,
-			&product.Size,
+			&product.Sizes,
 			&imagesJSON,
 			&product.TotalRatings,
 			&product.CategoryName,

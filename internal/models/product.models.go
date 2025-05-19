@@ -9,11 +9,10 @@ type Product struct {
 	DiscountName *string       `json:"discount_name,omitempty"` // pointer untuk handle NULL
 	Discount     *float64      `json:"discount,omitempty"`      // pointer untuk handle NULL
 	TotalOrder   int           `json:"total_order"`
+	Sizes        []ProductSize `json:"sizes"`
 	Images       []string      `json:"images"`
 	TotalRatings int           `json:"total_ratings"`
 	CategoryName string        `json:"category_name"`
-	Sizes        []ProductSize `json:"size,omitempty"`
-	Size         []SizesRes    `json:"sizeRes,omitempty"`
 }
 
 type ProductSize struct {
@@ -21,22 +20,18 @@ type ProductSize struct {
 	Name  string `json:"size"`
 	Stock int    `json:"stock"`
 }
-type SizesRes struct {
-	ID   int    `json:"id"`
-	Name string `json:"size"`
-}
 
 // Products adalah slice dari Product
 type Products []Product
 
 type ProductQueryParams struct {
-	Page     int    `json:"page" form:"page" binding:"numeric"`
-	Search   string `json:"search" form:"search"`
-	Options  string `json:"options" form:"options"`
-	Category string `json:"category" form:"category"`
-	Discount string `json:"discount" form:"discount"`
-	Min      int    `json:"min-price" form:"min-price" binding:"min=0"`
-	Max      int    `json:"max-price" form:"max-price"`
+	Search   string `form:"search"`
+	Category string `form:"category"`
+	Discount string `form:"discount"`
+	Options  string `form:"options"`
+	Min      int    `form:"min"`
+	Max      int    `form:"max"`
+	Page     int    `form:"page"`
 }
 
 type ProductRequest struct {
