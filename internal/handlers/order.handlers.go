@@ -75,7 +75,7 @@ func (h *OrderHandlers) GetHistoryOrders(ctx *gin.Context) {
 		response.InternalServerError("a server error occured", err.Error())
 		return
 	}
-	println(result)
+	println(len(result))
 	if len(result) == 0 {
 		response.NotFound("history order not found", errors.New("history order is empty"))
 		return

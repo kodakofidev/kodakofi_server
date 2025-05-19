@@ -15,6 +15,7 @@ type OrderHistory struct {
 	GrandTotal      int       `json:"grand_total"`
 	OrderId         int       `json:"order_id"`
 	Status          string    `json:"status"`
+	Path		    *string    `json:"path"`
 }
 
 // type OrderHistories []OrderHistory

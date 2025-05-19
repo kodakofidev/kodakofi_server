@@ -35,3 +35,10 @@ type OTPSend struct {
 	Email  string `json:"email" binding:"required"`
 	TypeID int    `json:"type_id" binding:"required"`
 }
+
+// Add this new model for password reset
+type ResetPasswordReq struct {
+	Email    string `json:"email" binding:"required"`
+	OTP      string `json:"otp" binding:"required"`
+	Password string `json:"password" binding:"required,min=8"`
+}
