@@ -18,6 +18,9 @@ type ProductRepoInterface interface {
 	GetDetailProduct(c context.Context, id string) (*models.Product, error)
 	GetRecommendation(c context.Context, limit int) (models.Products, error)
 	AddProduct(c context.Context, newProduct *models.ProductRequest, images []string) error
+	GetListImageProduct(c context.Context, id string) ([]string, error)
+	DeleteImage(c context.Context, product_id string) error
+	UpdateProduct(ctx context.Context, productID string, updateData *models.ProductRequest, newImages []string, shouldUpdateImages bool, currentImages []string) error
 }
 
 type RepoProduct struct {
@@ -105,13 +108,16 @@ func (r *RepoProduct) GetAllProducts(c context.Context, params *models.ProductQu
         p.id, p.name, p.category_id, p.price, p.description,
         d.name AS discount_name, d.discount, 
         COALESCE(SUM(po.qty), 0) AS total_order, 
-        COALESCE(json_agg(pi.path) FILTER (WHERE pi.path IS NOT NULL), '[]'::json) AS images, 
+		json_agg(json_build_object('id', s.id,'size', s.size)) as size,
+        COALESCE(json_agg(distinct(pi.path)) FILTER (WHERE pi.path IS NOT NULL), '[]'::json) AS images, 
         COUNT(r.*) AS total_ratings,
         c.name AS category_name,
         ps.total_filtered
     FROM filtered_products fp
     JOIN products p ON p.id = fp.id
     LEFT JOIN product_discounts pd ON pd.product_id = p.id
+	left join size_products sp on sp.product_id  = p.id
+    left join sizes s on s.id = sp.size_id 
     LEFT JOIN discounts d ON d.id = pd.discount_id
     LEFT JOIN products_orders po ON po.product_id = p.id
     LEFT JOIN product_images pi ON pi.product_id = p.id
@@ -134,6 +140,8 @@ func (r *RepoProduct) GetAllProducts(c context.Context, params *models.ProductQu
 	default:
 		mainQuery += " ORDER BY p.created_at DESC"
 	}
+
+	// COALESCE(json_agg(json_build_object('id', s.id,'size', s.size)) FILTER (WHERE pi.path IS NOT NULL), '[]'::json) AS size,
 
 	// Tambahkan LIMIT dan OFFSET
 	mainQuery += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argIndex, argIndex+1)
@@ -167,6 +175,7 @@ func (r *RepoProduct) GetAllProducts(c context.Context, params *models.ProductQu
 			&discountName,
 			&discount,
 			&product.TotalOrder,
+			&product.Size,
 			&imagesJSON,
 			&product.TotalRatings,
 			&product.CategoryName,
@@ -397,4 +406,129 @@ func (r *RepoProduct) AddProduct(c context.Context, newProduct *models.ProductRe
 	}
 
 	return nil
+}
+
+func (r *RepoProduct) DeleteImage(c context.Context, product_id string) error {
+	query := ` delete from product_images where product_id = $1`
+	_, err := r.DB.Exec(c, query, product_id)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *RepoProduct) GetListImageProduct(c context.Context, id string) ([]string, error) {
+	log.Println("[DEBUG ID]", id)
+	query := ` select json_agg(path) from product_images where product_id =$1`
+	var listImage []string
+	err := r.DB.QueryRow(c, query, id).Scan(&listImage)
+	if err != nil {
+		return nil, err
+	}
+	return listImage, nil
+}
+
+func (r *RepoProduct) UpdateProduct(ctx context.Context, productID string, updateData *models.ProductRequest, newImages []string, shouldUpdateImages bool, currentImages []string,
+) error {
+	tx, err := r.DB.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	// Build dynamic update query untuk product info
+	var queryParts []string
+	var params []interface{}
+	paramCount := 1
+
+	if updateData.Name != nil {
+		queryParts = append(queryParts, fmt.Sprintf("name = $%d", paramCount))
+		params = append(params, updateData.Name)
+		paramCount++
+	}
+	if updateData.CategoryID != nil {
+		queryParts = append(queryParts, fmt.Sprintf("category_id = $%d", paramCount))
+		params = append(params, *updateData.CategoryID)
+		paramCount++
+	}
+	if updateData.Description != nil {
+		queryParts = append(queryParts, fmt.Sprintf("description = $%d", paramCount))
+		params = append(params, *&updateData.Description)
+		paramCount++
+	}
+	if updateData.Price != nil {
+		queryParts = append(queryParts, fmt.Sprintf("price = $%d", paramCount))
+		params = append(params, *updateData.Price)
+		paramCount++
+	}
+
+	if len(queryParts) > 0 {
+		query := fmt.Sprintf(`UPDATE products SET %s, updated_at = NOW() WHERE id = $%d`, strings.Join(queryParts, ", "), paramCount)
+
+		params = append(params, productID)
+
+		_, err := tx.Exec(ctx, query, params...)
+		if err != nil {
+			return fmt.Errorf("failed to update product: %w", err)
+		}
+	}
+
+	// Handle size updates
+	if updateData.Size != nil {
+		_, err = tx.Exec(ctx, "DELETE FROM size_products WHERE product_id = $1", productID)
+		if err != nil {
+			return fmt.Errorf("failed to delete sizes: %w", err)
+		}
+
+		if len(updateData.Size) > 0 {
+			querySize := `insert into size_products (product_id, stock,size_id) values`
+			valuesSize := []any{productID, updateData.Stock}
+			for i, size := range updateData.Size {
+				if i > 0 {
+					querySize += ","
+				}
+				querySize += fmt.Sprintf("($1, $2,$%d)", i+3)
+				valuesSize = append(valuesSize, size)
+			}
+			log.Println("[valuessize]", valuesSize)
+			cmd, err := tx.Exec(ctx, querySize, valuesSize...)
+			if err != nil {
+				log.Println("[DEBUG 2]", err)
+				return errors.New("add product failed")
+			}
+			row := cmd.RowsAffected()
+			if row == 0 {
+				return errors.New("add product failed ")
+			}
+
+		}
+	}
+	_, err = tx.Exec(ctx, "DELETE FROM product_images WHERE product_id = $1", productID)
+
+	queryImage := `insert into product_images (product_id, path) values`
+	valuesImage := []any{productID}
+	for i, image := range newImages {
+		if i > 0 {
+			queryImage += ","
+		}
+		queryImage += fmt.Sprintf("($1,$%d)", i+2)
+		valuesImage = append(valuesImage, image)
+	}
+	log.Println("[DEBUG 2]", queryImage)
+
+	cmd, err := tx.Exec(ctx, queryImage, valuesImage...)
+
+	if err != nil {
+		log.Println("[DEBUG 3]", err)
+
+		return errors.New("add path image failed")
+	}
+	row := cmd.RowsAffected()
+	if row == 0 {
+		return errors.New("add path image failed")
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
