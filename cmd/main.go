@@ -33,6 +33,7 @@ func main() {
 	log.Println("DB connected successfully")
 
 	router := routes.InitRouter(db)
+
 	router.Static("/public/profile", "./public/img")
 	router.Static("/public/product-image", "./public/product-image")
 
