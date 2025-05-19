@@ -253,8 +253,18 @@ func (r *RepoProduct) GetDetailProduct(c context.Context, id string) (*models.Pr
   			(
   			  SELECT COUNT(*)
   			  FROM ratings r
-  			  WHERE r.product_id = p.id AND r.rating = 1
-  			) AS total_ratings
+  			  WHERE r.product_id = p.id
+  			) AS total_ratings,
+  			(
+  			  SELECT json_agg(json_build_object(
+  			    'id', s.id,
+  			    'size', s.size,
+  			    'stock', sp.stock
+  			  ))
+  			  FROM size_products sp
+  			  JOIN sizes s ON s.id = sp.size_id
+  			  WHERE sp.product_id = p.id
+  			) AS sizes
 		FROM products p
 		LEFT JOIN product_discounts pd ON pd.product_id = p.id
 		LEFT JOIN discounts d ON d.id = pd.discount_id
@@ -262,6 +272,7 @@ func (r *RepoProduct) GetDetailProduct(c context.Context, id string) (*models.Pr
 		WHERE p.id = $1`
 
 	var detail models.Product
+	var sizesJson []byte
 	err := r.DB.QueryRow(c, query, id).Scan(
 		&detail.ID,
 		&detail.Name,
@@ -273,11 +284,17 @@ func (r *RepoProduct) GetDetailProduct(c context.Context, id string) (*models.Pr
 		&detail.TotalOrder,
 		&detail.Images,
 		&detail.TotalRatings,
+		&sizesJson,
 	)
 
 	if err != nil {
-		return &models.Product{}, err
+		return nil, err
 	}
+
+	if err := json.Unmarshal(sizesJson, &detail.Sizes); err != nil {
+		return nil, err
+	}
+
 	return &detail, nil
 }
 
@@ -292,7 +309,7 @@ func (r *RepoProduct) GetRecommendation(c context.Context, limit int) (models.Pr
 			(
 			  SELECT COUNT(*)
 			  FROM ratings r
-			  WHERE r.product_id = p.id AND r.rating = 1
+			  WHERE r.product_id = p.id AND r.rating > 0
 			) AS total_ratings
 		FROM products p
 		LEFT JOIN product_discounts pd ON pd.product_id = p.id
