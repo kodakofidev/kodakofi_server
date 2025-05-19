@@ -7,7 +7,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func SeedProductDiscount(ctx context.Context, db *pgxpool.Pool) error {
+func SeedProductDiscounts(ctx context.Context, db *pgxpool.Pool) error {
 	query := `
 		INSERT INTO product_discounts (product_id, discount_id)
 		VALUES  

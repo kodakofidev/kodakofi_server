@@ -26,3 +26,13 @@ type ProductQueryParams struct {
 	Min      int    `json:"min-price" form:"min-price" binding:"min=0"`
 	Max      int    `json:"max-price" form:"max-price"`
 }
+
+type ProductRequest struct {
+	Id          string  `json:"id" form:"id,omitempty" db:"id"`
+	Name        string  `json:"name" form:"name"`
+	Price       float64 `json:"price" form:"price" `
+	Description string  `json:"description" form:"description"`
+	Stock       int     `json:"stock" form:"stock" `
+	CategoryID  int     `json:"category_id" form:"category_id" `
+	Size        []int   `json:"size" form:"size" `
+}

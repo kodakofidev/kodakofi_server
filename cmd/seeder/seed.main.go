@@ -78,7 +78,7 @@ func main() {
 	seed.SeedDiscounts(ctx, db)
 
 	log.Println("Starting product discount seeding...")
-	seed.SeedProductDiscount(ctx, db)
+	seed.SeedProductDiscounts(ctx, db)
 
 	log.Println("Seeding completed successfully.")
 }

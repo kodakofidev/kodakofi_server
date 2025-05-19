@@ -16,7 +16,7 @@ import (
 
 type OrderRepoInterface interface {
 	CreateOrder(ctx context.Context, data *models.CreateOrderRequest) (*models.CreateOrderResponse, error)
-	GetHistoryOrders(ctx context.Context, offset int, status, userId string) (models.OrderHistories, error)
+	GetHistoryOrders(ctx context.Context, offset int, status, userId string) ([]models.OrderHistory, error)
 }
 
 type RepoOrder struct {
@@ -253,7 +253,7 @@ func (r *RepoOrder) CreateOrder(ctx context.Context, data *models.CreateOrderReq
 }
 
 // repo get history orders
-func (r *RepoOrder) GetHistoryOrders(ctx context.Context, offset int, status, userId string) (models.OrderHistories, error) {
+func (r *RepoOrder) GetHistoryOrders(ctx context.Context, offset int, status, userId string) ([]models.OrderHistory, error) {
 
 	query := "select t.transaction_code, o.created_at, t.total_amount, o.id, s.status from orders o join transactions t on o.id = t.order_id join status s on s.id = o.status_id where o.user_id = $1 "
 
@@ -278,7 +278,7 @@ func (r *RepoOrder) GetHistoryOrders(ctx context.Context, offset int, status, us
 	}
 
 	defer rows.Close()
-	var result models.OrderHistories
+	var result []models.OrderHistory
 
 	for rows.Next() {
 		var history models.OrderHistory
