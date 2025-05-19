@@ -68,17 +68,17 @@ func main() {
 	log.Println("Starting tax seeding...")
 	seed.SeedTax(ctx, db)
 
-	// log.Println("Starting products rating seeding...")
-	// seed.SeedRating(ctx, db)
+	log.Println("Starting products rating seeding...")
+	seed.SeedRating(ctx, db)
 
 	// log.Println("Starting product image seeding...")
 	// seed.SeedImage(ctx, db)
 
-	// log.Println("Starting discount seeding...")
-	// seed.SeedDiscount(ctx, db)
+	log.Println("Starting discount seeding...")
+	seed.SeedDiscount(ctx, db)
 
-	// log.Println("Starting product discount seeding...")
-	// seed.SeedProductDiscount(ctx, db)
+	log.Println("Starting product discount seeding...")
+	seed.SeedProductDiscount(ctx, db)
 
 	log.Println("Seeding completed successfully.")
 }

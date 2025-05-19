@@ -27,6 +27,9 @@ func NewProduct(db *pgxpool.Pool) *RepoProduct {
 
 func (r *RepoProduct) GetAllProducts(c context.Context, params *models.ProductQueryParams) (*models.PaginatedResponse, error) {
 	pageSize := 6
+	if params.Page < 1 {
+		params.Page = 1
+	}
 	offset := (params.Page - 1) * pageSize
 
 	// Build WHERE clauses
@@ -247,7 +250,7 @@ func (r *RepoProduct) GetDetailProduct(c context.Context, id string) (*models.Pr
   			(
   			  SELECT COUNT(*)
   			  FROM ratings r
-  			  WHERE r.product_id = p.id AND r.rating = TRUE
+  			  WHERE r.product_id = p.id AND r.rating = 1
   			) AS total_ratings
 		FROM products p
 		LEFT JOIN product_discounts pd ON pd.product_id = p.id
@@ -286,7 +289,7 @@ func (r *RepoProduct) GetRecommendation(c context.Context, limit int) (models.Pr
 			(
 			  SELECT COUNT(*)
 			  FROM ratings r
-			  WHERE r.product_id = p.id AND r.rating = TRUE
+			  WHERE r.product_id = p.id AND r.rating = 1
 			) AS total_ratings
 		FROM products p
 		LEFT JOIN product_discounts pd ON pd.product_id = p.id
