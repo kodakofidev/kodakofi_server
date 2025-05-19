@@ -1,17 +1,24 @@
 package models
 
 type Product struct {
-	ID           string   `json:"id"`
-	Name         string   `json:"name"`
-	CategoryID   int      `json:"category_id"`
-	Price        float64  `json:"price"`
-	Description  string   `json:"description"`
-	DiscountName *string  `json:"discount_name,omitempty"` // pointer untuk handle NULL
-	Discount     *float64 `json:"discount,omitempty"`      // pointer untuk handle NULL
-	TotalOrder   int      `json:"total_order"`
-	Images       []string `json:"images"`
-	TotalRatings int      `json:"total_ratings"`
-	CategoryName string   `json:"category_name"`
+	ID           string        `json:"id"`
+	Name         string        `json:"name"`
+	CategoryID   int           `json:"category_id"`
+	Price        float64       `json:"price"`
+	Description  string        `json:"description"`
+	DiscountName *string       `json:"discount_name,omitempty"` // pointer untuk handle NULL
+	Discount     *float64      `json:"discount,omitempty"`      // pointer untuk handle NULL
+	TotalOrder   int           `json:"total_order"`
+	Images       []string      `json:"images"`
+	TotalRatings int           `json:"total_ratings"`
+	CategoryName string        `json:"category_name"`
+	Sizes        []ProductSize `json:"size,omitempty"`
+}
+
+type ProductSize struct {
+	ID    int    `json:"id"`
+	Name  string `json:"size"`
+	Stock int    `json:"stock"`
 }
 
 // Products adalah slice dari Product
