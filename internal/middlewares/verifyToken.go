@@ -12,20 +12,19 @@ import (
 func (a *Middleware) VerifyToken(ctx *gin.Context) {
 	bearerToken := ctx.GetHeader("Authorization")
 	responder := models.NewResponse(ctx)
-	var err error
 
 	if bearerToken == "" {
-		responder.Unauthorized("Unauthorized", err)
+		responder.Unauthorized("Token Not found", any(nil))
 		return
 	}
 
 	if !strings.HasPrefix(bearerToken, "Bearer ") {
-		responder.Unauthorized("Unauthorized", err)
+		responder.Unauthorized("Token Not valid", any(nil))
 		return
 	}
 	token := strings.Split(bearerToken, " ")[1]
 	if token == "" {
-		responder.Unauthorized("Unauthorized", err)
+		responder.Unauthorized("Unauthorized", any(nil))
 		return
 	}
 	payloads := &pkg.Claims{}

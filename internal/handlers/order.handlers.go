@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/kodakofidev/kodakofi_server/internal/models"
 	"github.com/kodakofidev/kodakofi_server/internal/repositories"
+	"github.com/kodakofidev/kodakofi_server/pkg"
 )
 
 type OrderHandlers struct {
@@ -39,12 +40,10 @@ func (h *OrderHandlers) PostOrderHandler(ctx *gin.Context) {
 
 // handlers get history order
 func (h *OrderHandlers) GetHistoryOrders(ctx *gin.Context) {
-	// claims, _ := ctx.Get("payloads")
-	// userClaims := claims.(*pkg.Claims)
-
+	claims, _ := ctx.Get("payloads")
+	userClaims := claims.(*pkg.Claims)
+	
 	response := models.NewResponse(ctx)
-
-	userId := "416e8dea-843e-4de9-85cb-ab1dcf4f378f"
 	
 	// tangkap query
 	pageQ := ctx.Query("page");
@@ -71,7 +70,7 @@ func (h *OrderHandlers) GetHistoryOrders(ctx *gin.Context) {
 	log.Println("offset", offset)
 	log.Println("statusQ", statusQ)
 
-	result, err := h.repo.GetHistoryOrders(ctx, offset, statusQ, userId)
+	result, err := h.repo.GetHistoryOrders(ctx, offset, statusQ, userClaims.Uuid)
 	if err != nil {
 		response.InternalServerError("a server error occured", err.Error())
 		return
