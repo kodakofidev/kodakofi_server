@@ -237,6 +237,59 @@ func (h *AuthHandlers) SendOTP(ctx *gin.Context) {
 	response.Success("Verification code sent successfully", map[string]string{"email": req.Email})
 }
 
+// ResetPassword handles the password reset functionality
+func (h *AuthHandlers) ResetPassword(ctx *gin.Context) {
+	var req models.ResetPasswordReq
+	response := models.NewResponse(ctx)
+
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		if strings.Contains(err.Error(), "Field validation for 'Password'") {
+			response.BadRequest("Password length must be at least 8 characters", err.Error())
+			return
+		}
+		log.Println(err.Error())
+		response.BadRequest("Invalid input", err.Error())
+		return
+	}
+
+	// Verify the OTP code - use type_id 2 for password reset
+	valid, err := h.repo.VerifyOTP(ctx.Request.Context(), req.Email, req.OTP, 2)
+	if err != nil {
+		log.Printf("OTP verification failed: %v", err)
+		response.BadRequest("Verification failed", err.Error())
+		return
+	}
+
+	if !valid {
+		response.BadRequest("Invalid or expired verification code", nil)
+		return
+	}
+
+	// Get the user by email
+	userResult, err := h.repo.Login(ctx.Request.Context(), req.Email)
+	if err != nil || userResult.AuthID == "" {
+		response.BadRequest("User not found", nil)
+		return
+	}
+
+	// Hash the new password
+	hash := pkg.InitHashConfig()
+	hash.UseDefaultConfig()
+	hashedPass, err := hash.GenHashedPassword(req.Password)
+	if err != nil {
+		response.InternalServerError("Failed to hash password", err.Error())
+		return
+	}
+
+	// Update the password in the database
+	if err := h.repo.UpdateUserPassword(ctx.Request.Context(), userResult.AuthID, hashedPass); err != nil {
+		response.InternalServerError("Failed to update password", err.Error())
+		return
+	}
+
+	response.Success("Password has been reset successfully", nil)
+}
+
 func isValidEmail(email string) bool {
 	re := regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
 	return re.MatchString(email)

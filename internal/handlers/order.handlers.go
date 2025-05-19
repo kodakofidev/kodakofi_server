@@ -42,12 +42,12 @@ func (h *OrderHandlers) PostOrderHandler(ctx *gin.Context) {
 func (h *OrderHandlers) GetHistoryOrders(ctx *gin.Context) {
 	claims, _ := ctx.Get("payloads")
 	userClaims := claims.(*pkg.Claims)
-	
+
 	response := models.NewResponse(ctx)
-	
+
 	// tangkap query
-	pageQ := ctx.Query("page");
-	statusQ := ctx.Query("status");
+	pageQ := ctx.Query("page")
+	statusQ := ctx.Query("status")
 	var offset int
 	var pageQInt int
 	if pageQ != "" {
@@ -64,7 +64,7 @@ func (h *OrderHandlers) GetHistoryOrders(ctx *gin.Context) {
 	} else if pageQInt == 0 {
 		offset = -1
 	} else {
-		offset = pageQInt * 4 - 4
+		offset = pageQInt*4 - 4
 	}
 
 	log.Println("offset", offset)
@@ -75,7 +75,7 @@ func (h *OrderHandlers) GetHistoryOrders(ctx *gin.Context) {
 		response.InternalServerError("a server error occured", err.Error())
 		return
 	}
-
+	println(len(result))
 	if len(result) == 0 {
 		response.NotFound("history order not found", errors.New("history order is empty"))
 		return

@@ -29,7 +29,7 @@ func (h *ProfileHandlers) FetchProfileHandler(ctx *gin.Context) {
 	var err error
 
 	if !exists {
-		responder.Unauthorized("authentication required", err.Error())
+		responder.Unauthorized("authentication required", any(err))
 		return
 	}
 
@@ -65,6 +65,7 @@ func (h *ProfileHandlers) EditProfileHandler(ctx *gin.Context) {
 		return
 	}
 	userId := claims.Uuid
+	// userId := "77abbee4-11d8-4db2-9f05-769363454b61"
 
 	var formBody models.ProfileForm
 	if err := ctx.ShouldBind(&formBody); err != nil {
@@ -84,11 +85,11 @@ func (h *ProfileHandlers) EditProfileHandler(ctx *gin.Context) {
 		profileImageURL = filepath
 	}
 
-	log.Println("[DEBUG] IMAGE URL", profileImageURL)
+	// log.Println("[DEBUG] IMAGE URL", profileImageURL)
 
 	result, err := h.repo.EditProfile(ctx.Request.Context(), userId, formBody, profileImageURL)
 	if err != nil {
-		responder.InternalServerError("Failed to edit profile picture", err)
+		responder.InternalServerError("Failed to edit profile", err)
 		return
 	}
 
@@ -98,7 +99,7 @@ func (h *ProfileHandlers) EditProfileHandler(ctx *gin.Context) {
 // UPLOAD IMAGE HANDLER
 func (h *ProfileHandlers) handleFileUpload(ctx *gin.Context, file *multipart.FileHeader, userID string) (filename, filePath string, err error) {
 	//First delete any existing profile image for this very user
-	oldFiles, err := filepath.Glob(filepath.Join("public", "img", "*_"+userID+"_profile*"))
+	oldFiles, err := filepath.Glob(filepath.Join("public", "profile-images", "*_"+userID+"_profile*"))
 	if err != nil {
 		return "", "", fmt.Errorf("failed to check for existing files: %w", err)
 	}
@@ -113,12 +114,11 @@ func (h *ProfileHandlers) handleFileUpload(ctx *gin.Context, file *multipart.Fil
 
 	ext := filepath.Ext(file.Filename)
 	filename = fmt.Sprintf("%d_%s_profile%s", time.Now().UnixNano(), userID, ext)
-	filePath = filepath.Join("public", "img", filename)
+	filePath = filepath.Join("public", "profile-images", filename)
 
 	if err := ctx.SaveUploadedFile(file, filePath); err != nil {
 		return "", "", fmt.Errorf("failed to save file: %w", err)
 	}
 
-	// Return URL path instead of filesystem path
-	return filename, "/img/" + filename, nil
+	return filename, filename, nil
 }

@@ -16,7 +16,7 @@ import (
 
 type OrderRepoInterface interface {
 	CreateOrder(ctx context.Context, data *models.CreateOrderRequest) (*models.CreateOrderResponse, error)
-	GetHistoryOrders(ctx context.Context, offset int, status, userId string) (models.OrderHistories, error)
+	GetHistoryOrders(ctx context.Context, offset int, status, userId string) ([]models.OrderHistory, error)
 }
 
 type RepoOrder struct {
@@ -143,9 +143,9 @@ func (r *RepoOrder) CreateOrder(ctx context.Context, data *models.CreateOrderReq
 
 		// 4d. Insert ke products_orders
 		_, err = tx.Exec(ctx, `
-			INSERT INTO products_orders (order_id, product_id, base_price, size, qty, added_price, sub_total)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-			orderID, item.ProductID, int(basePrice), sizeName, item.Qty, int(basePrice*addedPrice), subTotal)
+			INSERT INTO products_orders (order_id, product_id, base_price, size, is_iced, qty, added_price, sub_total)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+			orderID, item.ProductID, int(basePrice), sizeName, item.IsIced, item.Qty, int(basePrice*addedPrice), subTotal)
 		if err != nil {
 			return nil, fmt.Errorf("failed to insert product_order: %w", err)
 		}
@@ -192,9 +192,9 @@ func (r *RepoOrder) CreateOrder(ctx context.Context, data *models.CreateOrderReq
 			}
 		} else {
 			_, err = tx.Exec(ctx, `
-					INSERT INTO products_orders (order_id, product_id, base_price, size, qty, added_price, sub_total)
-					VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-				orderID, iceCubeID, int(iceCubePrice), "Not Drink", iceCubeQtyTotal, 0, iceTotal)
+					INSERT INTO products_orders (order_id, product_id, base_price, size, is_iced, qty, added_price, sub_total)
+					VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+				orderID, iceCubeID, int(iceCubePrice), "Not Drink", false, iceCubeQtyTotal, 0, iceTotal)
 			if err != nil {
 				return nil, fmt.Errorf("failed to insert ice cube order: %w", err)
 			}
@@ -253,10 +253,10 @@ func (r *RepoOrder) CreateOrder(ctx context.Context, data *models.CreateOrderReq
 }
 
 // repo get history orders
-func (r *RepoOrder) GetHistoryOrders(ctx context.Context, offset int, status, userId string) (models.OrderHistories, error) {
+func (r *RepoOrder) GetHistoryOrders(ctx context.Context, offset int, status, userId string) ([]models.OrderHistory, error) {
 
-	query := "select t.transaction_code, o.created_at, t.total_amount, o.id, s.status from orders o join transactions t on o.id = t.order_id join status s on s.id = o.status_id where o.user_id = $1 "
-
+	// query := "select t.transaction_code, o.created_at, t.total_amount, o.id, s.status from orders o join transactions t on o.id = t.order_id join status s on s.id = o.status_id where o.user_id = $1 "
+	query := `select DISTINCT ON (o.id) t.transaction_code, o.created_at, t.total_amount, o.id AS order_id, s.status, pi2."path" FROM orders o LEFT JOIN transactions t ON o.id = t.order_id left JOIN status s ON s.id = o.status_id LEFT JOIN products_orders po ON po.order_id = o.id left JOIN product_images pi2 ON pi2.product_id = po.product_id WHERE o.user_id = $1`
 
 	value := []interface{}{userId}
 	valueIndex := 2
@@ -277,13 +277,13 @@ func (r *RepoOrder) GetHistoryOrders(ctx context.Context, offset int, status, us
 		log.Println(err.Error())
 		return nil, err
 	}
-	
+
 	defer rows.Close()
-	var result models.OrderHistories
+	var result []models.OrderHistory
 
 	for rows.Next() {
 		var history models.OrderHistory
-		if err := rows.Scan(&history.TransactionCode, &history.Date, &history.GrandTotal, &history.OrderId, &history.Status); err != nil {
+		if err := rows.Scan(&history.TransactionCode, &history.Date, &history.GrandTotal, &history.OrderId, &history.Status, &history.Path); err != nil {
 			log.Println(err.Error())
 			return nil, err
 		}
@@ -291,3 +291,5 @@ func (r *RepoOrder) GetHistoryOrders(ctx context.Context, offset int, status, us
 	}
 	return result, nil
 }
+
+
