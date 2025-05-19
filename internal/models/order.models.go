@@ -1,11 +1,23 @@
 package models
 
+import "time"
+
 type OrderItem struct {
 	ProductID string `json:"product_id"`
 	Qty       int    `json:"qty"`
 	SizeID    int    `json:"size_id"`
 	IsIced    bool   `json:"is_iced"`
 }
+
+type OrderHistory struct {   
+	TransactionCode string    `json:"transaction_code"`
+	Date            time.Time `json:"date"`
+	GrandTotal      int       `json:"grand_total"`
+	OrderId         int       `json:"order_id"`
+	Status          string    `json:"status"`
+}
+
+type OrderHistories []OrderHistory 
 
 type CreateOrderRequest struct {
 	Email            string      `json:"email"`
@@ -20,7 +32,7 @@ type OrderItemResponse struct {
 	ProductID   string `json:"product_id"`
 	ProductName string `json:"product_name"`
 	Qty         int    `json:"qty"`
-	Size        int    `json:"size"`
+	Size        string `json:"size"`
 	IsIced      bool   `json:"is_iced"`
 }
 

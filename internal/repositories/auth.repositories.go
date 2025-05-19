@@ -54,7 +54,7 @@ func (r *RepoAuth) Register(c context.Context, userReq models.UserReq, hashedPas
 	}
 
 	queryProfile := `INSERT INTO profiles (user_id, fullname, phone, address, image) VALUES ($1, $2, $3, $4, $5);`
-	valuesProfile := []any{result.AuthID, "", "", "", ""}
+	valuesProfile := []any{result.AuthID, userReq.Fullname, "", "", ""}
 	if _, err := tx.Exec(c, queryProfile, valuesProfile...); err != nil {
 		return models.UserRes{}, models.UserRes{}, err
 	}
@@ -68,10 +68,15 @@ func (r *RepoAuth) Register(c context.Context, userReq models.UserReq, hashedPas
 }
 
 func (r *RepoAuth) Login(c context.Context, email string) (models.UserRes, error) {
-	query := `SELECT id, email, "role", password, is_verified FROM users WHERE email = $1`
+	query := `
+		SELECT u.id, u.email, u."role", u.password, u.is_verified, COALESCE(p.fullname, '') as fullname 
+		FROM users u 
+		LEFT JOIN profiles p ON u.id = p.user_id 
+		WHERE u.email = $1
+	`
 	values := []any{email}
 	var result models.UserRes
-	if err := r.DB.QueryRow(c, query, values...).Scan(&result.AuthID, &result.Email, &result.Role, &result.Pass, &result.IsVerified); err != nil && err != pgx.ErrNoRows {
+	if err := r.DB.QueryRow(c, query, values...).Scan(&result.AuthID, &result.Email, &result.Role, &result.Pass, &result.IsVerified, &result.Fullname); err != nil && err != pgx.ErrNoRows {
 		return models.UserRes{}, err
 	}
 	return result, nil

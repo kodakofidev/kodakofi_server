@@ -2,13 +2,12 @@ package main
 
 import (
 	"log"
-	"time"
 
-	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
-	_ "github.com/joho/godotenv"
+	_ "github.com/joho/godotenv/autoload"
+	"github.com/kodakofidev/kodakofi_server/internal/handlers"
 	"github.com/kodakofidev/kodakofi_server/internal/models"
 	"github.com/kodakofidev/kodakofi_server/internal/routes"
 	"github.com/kodakofidev/kodakofi_server/pkg"
@@ -17,9 +16,13 @@ import (
 var dbpool *pgxpool.Pool
 
 func main() {
+	// Load environment variables early
 	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found, using system environment variables")
+		log.Printf("Warning: Error loading .env file: %v", err)
 	}
+
+	// Initialize OAuth providers before setting up routes
+	handlers.InitAuth()
 
 	db, err := pkg.Posql()
 	if err != nil {
@@ -31,17 +34,8 @@ func main() {
 
 	router := routes.InitRouter(db)
 
-	router.Static("/profile-images", "./public/profile-images")
-	router.Static("/public", "./public")
-
-	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"*"},
-		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
-		ExposeHeaders:    []string{"Content-Length"},
-		AllowCredentials: true,
-		MaxAge:           12 * time.Hour,
-	}))
+	router.Static("/public/profile", "./public/img")
+	router.Static("/public/product-image", "./public/product-image")
 
 	router.GET("/ping", func(c *gin.Context) {
 		responder := models.NewResponse(c)
