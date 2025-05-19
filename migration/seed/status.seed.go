@@ -13,7 +13,6 @@ func SeedStatus(ctx context.Context, db *pgxpool.Pool) error {
 		VALUES 
 			('Pending'),
 			('Processing'),
-			('On Delivery'),
 			('Completed'),
 			('Cancelled')
 		ON CONFLICT (status) DO NOTHING;
