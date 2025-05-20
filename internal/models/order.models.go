@@ -15,7 +15,7 @@ type OrderHistory struct {
 	GrandTotal      int       `json:"grand_total"`
 	OrderId         int       `json:"order_id"`
 	Status          string    `json:"status"`
-	Path		    *string    `json:"path"`
+	Path            *string   `json:"path"`
 }
 
 // type OrderHistories []OrderHistory
@@ -48,4 +48,26 @@ type CreateOrderResponse struct {
 	Total          int                 `json:"total"`
 	Tax            int                 `json:"tax"`
 	TotalAmount    int                 `json:"total_amount"`
+}
+
+type TotalSalesItemReponse struct {
+	Date           time.Time `json:"date"`
+	Item           int       `json:"item"`
+	TotalItemOrder int       `json:"total_item_order"`
+}
+
+type MetaData struct {
+	Data       []TotalIncomeItemReponse `json:"data"`
+	TotalData  int                      `json:"total_data"`
+	Page       int                      `json:"page"`
+	TotalPages int                      `json:"total_pages"`
+	NextLink   string                   `json:"next_link"`
+	PrevLink   string                   `json:"prev_link"`
+}
+
+type TotalIncomeItemReponse struct {
+	Date           time.Time `json:"date"`
+	ProductName    string    `json:"product_name"`
+	TotalItemOrder int       `json:"total_item_order"`
+	Income         int       `json:"income"`
 }

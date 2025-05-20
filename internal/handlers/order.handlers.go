@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/kodakofidev/kodakofi_server/internal/models"
@@ -82,4 +83,74 @@ func (h *OrderHandlers) GetHistoryOrders(ctx *gin.Context) {
 	}
 
 	response.Success("success", result)
+}
+
+func (h *OrderHandlers) FetchTotalSales(ctx *gin.Context) {
+	response := models.NewResponse(ctx)
+
+	startDateStr := ctx.Query("start_date")
+	endDateStr := ctx.Query("end_date")
+
+	startDate, err := time.Parse("2006-01-02", startDateStr)
+	if err != nil {
+		response.BadRequest("invalid start_date format (expected YYYY-MM-DD)", err.Error())
+		return
+	}
+
+	endDate, err := time.Parse("2006-01-02", endDateStr)
+	if err != nil {
+		response.BadRequest("invalid end_date format (expected YYYY-MM-DD)", err.Error())
+		return
+	}
+
+	res, err := h.repo.GetTotalSales(ctx.Request.Context(), startDate, endDate)
+	if err != nil {
+		response.InternalServerError("failed to fetch total sales", err.Error())
+		return
+	}
+
+	response.Success("total sales fetched successfully", res)
+}
+
+func (h *OrderHandlers) FetchIncome(ctx *gin.Context) {
+	response := models.NewResponse(ctx)
+
+	startDateStr := ctx.Query("start_date")
+	endDateStr := ctx.Query("end_date")
+	pageStr := ctx.DefaultQuery("page", "1")
+	limitStr := ctx.DefaultQuery("limit", "5")
+
+	startDate, err := time.Parse("2006-01-02", startDateStr)
+	if err != nil {
+		response.BadRequest("invalid start_date format (expected YYYY-MM-DD)", err.Error())
+		return
+	}
+
+	endDate, err := time.Parse("2006-01-02", endDateStr)
+	if err != nil {
+		response.BadRequest("invalid end_date format (expected YYYY-MM-DD)", err.Error())
+		return
+	}
+
+	page, err := strconv.Atoi(pageStr)
+	if err != nil || page < 1 {
+		response.BadRequest("invalid page param", nil)
+		return
+	}
+
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit < 1 {
+		response.BadRequest("invalid limit param", nil)
+		return
+	}
+
+	baseURL := ctx.Request.URL.Path
+
+	res, err := h.repo.GetIncomeSales(ctx.Request.Context(), startDate, endDate, page, limit, baseURL)
+	if err != nil {
+		response.InternalServerError("failed to fetch income sales", err.Error())
+		return
+	}
+
+	response.Success("income sales fetched successfully", res)
 }
