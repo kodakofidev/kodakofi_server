@@ -8,10 +8,10 @@ import (
 	"github.com/kodakofidev/kodakofi_server/internal/repositories"
 )
 
-func order(r *gin.RouterGroup, db *pgxpool.Pool, mdw *middlewares.Middleware) {
-	route := r.Group("/order")
+func admin(r *gin.RouterGroup, db *pgxpool.Pool, mdw *middlewares.Middleware) {
+	route := r.Group("/admin")
 	repo := repositories.NewOrder(db)
 	handlers := handlers.NewOrder(repo)
-	route.POST("", mdw.VerifyToken, mdw.AccsessGate("user"), handlers.PostOrderHandler)
-	route.GET("", mdw.VerifyToken, mdw.AccsessGate("user"), handlers.GetHistoryOrders)
+	route.GET("sales", mdw.VerifyToken, mdw.AccsessGate("admin"), handlers.FetchTotalSales)
+	route.GET("income", mdw.VerifyToken, mdw.AccsessGate("admin"), handlers.FetchIncome)
 }

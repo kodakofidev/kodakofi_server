@@ -17,6 +17,8 @@ import (
 type OrderRepoInterface interface {
 	CreateOrder(ctx context.Context, data *models.CreateOrderRequest) (*models.CreateOrderResponse, error)
 	GetHistoryOrders(ctx context.Context, offset int, status, userId string) ([]models.OrderHistory, error)
+	GetTotalSales(ctx context.Context, startDate, endDate time.Time) ([]models.TotalSalesItemReponse, error)
+	GetIncomeSales(ctx context.Context, startDate, endDate time.Time, page, limit int, baseURL string) (*models.MetaData, error)
 }
 
 type RepoOrder struct {
@@ -290,4 +292,112 @@ func (r *RepoOrder) GetHistoryOrders(ctx context.Context, offset int, status, us
 		result = append(result, history)
 	}
 	return result, nil
+}
+
+func (r *RepoOrder) GetTotalSales(ctx context.Context, startDate, endDate time.Time) ([]models.TotalSalesItemReponse, error) {
+	query := `
+		SELECT
+			DATE(o.created_at) as date,
+			SUM(po.qty) as total_items
+		FROM orders o
+		JOIN products_orders po ON o.id = po.order_id
+		WHERE o.created_at BETWEEN $1 AND $2
+		GROUP BY date
+		ORDER BY date ASC
+	`
+
+	rows, err := r.DB.Query(ctx, query, startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []models.TotalSalesItemReponse
+	var totalItems int
+
+	for rows.Next() {
+		var item models.TotalSalesItemReponse
+		err := rows.Scan(&item.Date, &item.Item)
+		if err != nil {
+			return nil, err
+		}
+		totalItems += item.Item
+		result = append(result, item)
+	}
+
+	// Tambahkan total ke semua elemen agar dapat digunakan untuk summary di FE
+	for i := range result {
+		result[i].TotalItemOrder = totalItems
+	}
+
+	return result, nil
+}
+
+func (r *RepoOrder) GetIncomeSales(ctx context.Context, startDate, endDate time.Time, page, limit int, baseURL string) (*models.MetaData, error) {
+	offset := (page - 1) * limit
+
+	query := `
+		SELECT
+			DATE(o.created_at) as order_date,
+			p.name as product_name,
+			SUM(po.qty) as total_item_order,
+			SUM(po.sub_total) as income
+		FROM products_orders po
+		JOIN orders o ON o.id = po.order_id
+		JOIN products p ON p.id = po.product_id
+		JOIN transactions t ON o.id = t.order_id
+		WHERE o.created_at BETWEEN $1 AND $2
+		GROUP BY order_date, p.name
+		ORDER BY income DESC
+		OFFSET $3 LIMIT $4
+	`
+
+	rows, err := r.DB.Query(ctx, query, startDate, endDate, offset, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []models.TotalIncomeItemReponse
+	for rows.Next() {
+		var item models.TotalIncomeItemReponse
+		if err := rows.Scan(&item.Date, &item.ProductName, &item.TotalItemOrder, &item.Income); err != nil {
+			return nil, err
+		}
+		results = append(results, item)
+	}
+
+	// Hitung total data
+	var totalData int
+	countQuery := `
+		SELECT COUNT(*) FROM (
+			SELECT DISTINCT DATE(o.created_at), p.name
+			FROM products_orders po
+			JOIN orders o ON o.id = po.order_id
+			JOIN products p ON p.id = po.product_id
+			WHERE o.created_at BETWEEN $1 AND $2
+		) AS subquery
+	`
+	err = r.DB.QueryRow(ctx, countQuery, startDate, endDate).Scan(&totalData)
+	if err != nil {
+		return nil, err
+	}
+
+	totalPages := int(math.Ceil(float64(totalData) / float64(limit)))
+
+	meta := models.MetaData{
+		Data:       results,
+		TotalData:  totalData,
+		Page:       page,
+		TotalPages: totalPages,
+	}
+
+	if page < totalPages {
+		meta.NextLink = fmt.Sprintf("%s?page=%d&limit=%d&start_date=%s&end_date=%s", baseURL, page+1, limit, startDate.Format("2006-01-02"), endDate.Format("2006-01-02"))
+	}
+	if page > 1 {
+		meta.PrevLink = fmt.Sprintf("%s?page=%d&limit=%d&start_date=%s&end_date=%s", baseURL, page-1, limit, startDate.Format("2006-01-02"), endDate.Format("2006-01-02"))
+	}
+
+	return &meta, nil
 }
