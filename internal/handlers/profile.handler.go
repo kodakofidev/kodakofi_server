@@ -120,5 +120,5 @@ func (h *ProfileHandlers) handleFileUpload(ctx *gin.Context, file *multipart.Fil
 		return "", "", fmt.Errorf("failed to save file: %w", err)
 	}
 
-	return filename, filename, nil
+	return filename, "public/profile-images/" + filename, nil
 }
