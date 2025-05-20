@@ -9,6 +9,8 @@ type ProfileUser struct {
 	Fullname string `json:"fullname" form:"fullname"`
 	Phone    string `json:"phone" form:"phone"`
 	Address  string `json:"address" form:"address"`
+	// Email    string `json:"email" form:"email"`
+
 	// Password string `json:"-" form:"password" binding:"required,min=8"`
 }
 
