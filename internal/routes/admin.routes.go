@@ -12,6 +12,6 @@ func admin(r *gin.RouterGroup, db *pgxpool.Pool, mdw *middlewares.Middleware) {
 	route := r.Group("/admin")
 	repo := repositories.NewOrder(db)
 	handlers := handlers.NewOrder(repo)
-	route.GET("sales", mdw.VerifyToken, mdw.AccsessGate("admin"), handlers.FetchTotalSales)
-	route.GET("income", mdw.VerifyToken, mdw.AccsessGate("admin"), handlers.FetchIncome)
+	route.GET("data-sales", mdw.VerifyToken, mdw.AccsessGate("admin"), handlers.FetchDataSalesHandler)
+	route.PATCH("status", mdw.VerifyToken, mdw.AccsessGate("admin"), handlers.UpdateOrderStatus)
 }
