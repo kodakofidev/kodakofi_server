@@ -17,8 +17,8 @@ import (
 type OrderRepoInterface interface {
 	CreateOrder(ctx context.Context, data *models.CreateOrderRequest) (*models.CreateOrderResponse, error)
 	GetHistoryOrders(ctx context.Context, offset int, status, userId string) ([]models.OrderHistory, error)
-	GetTotalSales(ctx context.Context, startDate, endDate time.Time) ([]models.TotalSalesItemReponse, error)
-	GetIncomeSales(ctx context.Context, startDate, endDate time.Time, page, limit int, baseURL string) (*models.MetaData, error)
+	GetDataSales(ctx context.Context, startDate, endDate time.Time) (*models.ProductSalesDataRes, error)
+	UpdateStatusOrder(ctx context.Context, orderID, statusID int) (*models.UpdateOrderStatusRes, error)
 }
 
 type RepoOrder struct {
@@ -294,110 +294,133 @@ func (r *RepoOrder) GetHistoryOrders(ctx context.Context, offset int, status, us
 	return result, nil
 }
 
-func (r *RepoOrder) GetTotalSales(ctx context.Context, startDate, endDate time.Time) ([]models.TotalSalesItemReponse, error) {
-	query := `
-		SELECT
-			DATE(o.created_at) as date,
-			SUM(po.qty) as total_items
+func (r *RepoOrder) GetDataSales(ctx context.Context, startDate, endDate time.Time) (*models.ProductSalesDataRes, error) {
+	var res models.ProductSalesDataRes
+
+	// 1. Ambil status order
+	statusQuery := `
+		SELECT s.status, COUNT(o.id)
+		FROM orders o
+		JOIN status s ON o.status_id = s.id
+		WHERE o.created_at BETWEEN $1 AND $2
+		GROUP BY s.status
+	`
+	rows, err := r.DB.Query(ctx, statusQuery, startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	statusData := models.SalesDataStatus{}
+	for rows.Next() {
+		var status string
+		var count int
+		if err := rows.Scan(&status, &count); err != nil {
+			return nil, err
+		}
+		switch status {
+		case "Pending":
+			statusData.Pending = count
+		case "Processing":
+			statusData.Processing = count
+		case "Completed":
+			statusData.Completed = count
+		}
+	}
+	res.Status = statusData
+
+	// 2. Ambil total item terjual per hari (FIXED)
+	dailySalesQuery := `
+		SELECT DATE(o.created_at) AS order_date, SUM(po.qty) AS total_qty
 		FROM orders o
 		JOIN products_orders po ON o.id = po.order_id
 		WHERE o.created_at BETWEEN $1 AND $2
-		GROUP BY date
-		ORDER BY date ASC
+		GROUP BY order_date
+		ORDER BY order_date
 	`
-
-	rows, err := r.DB.Query(ctx, query, startDate, endDate)
+	dailyRows, err := r.DB.Query(ctx, dailySalesQuery, startDate, endDate)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer dailyRows.Close()
 
-	var result []models.TotalSalesItemReponse
-	var totalItems int
-
-	for rows.Next() {
-		var item models.TotalSalesItemReponse
-		err := rows.Scan(&item.Date, &item.Item)
-		if err != nil {
+	dailyItems := []models.DailySoldItems{}
+	for dailyRows.Next() {
+		var date time.Time
+		var productsSold int
+		if err := dailyRows.Scan(&date, &productsSold); err != nil {
 			return nil, err
 		}
-		totalItems += item.Item
-		result = append(result, item)
+		dailyItems = append(dailyItems, models.DailySoldItems{
+			Date:         date.Format("2006-01-02"), // konversi ke string
+			ProductsSold: productsSold,
+		})
+	}
+	res.DailySoldItems = dailyItems
+
+	// 3. Total seluruh item terjual
+	err = r.DB.QueryRow(ctx, `
+		SELECT COALESCE(SUM(po.qty), 0)
+		FROM orders o
+		JOIN products_orders po ON o.id = po.order_id
+		WHERE o.created_at BETWEEN $1 AND $2
+	`, startDate, endDate).Scan(&res.TotalSoldItems)
+	if err != nil {
+		return nil, err
 	}
 
-	// Tambahkan total ke semua elemen agar dapat digunakan untuk summary di FE
-	for i := range result {
-		result[i].TotalItemOrder = totalItems
+	// 4. Data income per produk
+	incomeQuery := `
+		SELECT p.name, SUM(po.qty) AS total_qty, SUM(po.sub_total) AS income
+		FROM products_orders po
+		JOIN products p ON po.product_id = p.id
+		JOIN orders o ON o.id = po.order_id
+		WHERE o.created_at BETWEEN $1 AND $2
+		GROUP BY p.name
+		ORDER BY total_qty DESC
+	`
+	incomeRows, err := r.DB.Query(ctx, incomeQuery, startDate, endDate)
+	if err != nil {
+		return nil, err
 	}
+	defer incomeRows.Close()
 
-	return result, nil
+	incomeData := []models.TotalIncomeItemResponse{}
+	for incomeRows.Next() {
+		var item models.TotalIncomeItemResponse
+		var incomeInt int
+		if err := incomeRows.Scan(&item.ProductName, &item.TotalItemSold, &incomeInt); err != nil {
+			return nil, err
+		}
+		item.Income = fmt.Sprintf("%d", incomeInt)
+		incomeData = append(incomeData, item)
+	}
+	res.IncomeDataPerItem = incomeData
+	res.TotalData = len(incomeData)
+
+	return &res, nil
 }
 
-func (r *RepoOrder) GetIncomeSales(ctx context.Context, startDate, endDate time.Time, page, limit int, baseURL string) (*models.MetaData, error) {
-	offset := (page - 1) * limit
-
+func (r *RepoOrder) UpdateStatusOrder(ctx context.Context, orderID, statusID int) (*models.UpdateOrderStatusRes, error) {
 	query := `
-		SELECT
-			DATE(o.created_at) as order_date,
-			p.name as product_name,
-			SUM(po.qty) as total_item_order,
-			SUM(po.sub_total) as income
-		FROM products_orders po
-		JOIN orders o ON o.id = po.order_id
-		JOIN products p ON p.id = po.product_id
-		JOIN transactions t ON o.id = t.order_id
-		WHERE o.created_at BETWEEN $1 AND $2
-		GROUP BY order_date, p.name
-		ORDER BY income DESC
-		OFFSET $3 LIMIT $4
+		UPDATE orders
+		SET
+			status_id = $1,
+			updated_at = now()
+		WHERE id = $2
+		RETURNING id,
+		(SELECT status FROM status
+			WHERE id = $1),
+		(SELECT transaction_code FROM transactions
+			WHERE order_id = $2),
+		updated_at
 	`
 
-	rows, err := r.DB.Query(ctx, query, startDate, endDate, offset, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var results []models.TotalIncomeItemReponse
-	for rows.Next() {
-		var item models.TotalIncomeItemReponse
-		if err := rows.Scan(&item.Date, &item.ProductName, &item.TotalItemOrder, &item.Income); err != nil {
-			return nil, err
-		}
-		results = append(results, item)
-	}
-
-	// Hitung total data
-	var totalData int
-	countQuery := `
-		SELECT COUNT(*) FROM (
-			SELECT DISTINCT DATE(o.created_at), p.name
-			FROM products_orders po
-			JOIN orders o ON o.id = po.order_id
-			JOIN products p ON p.id = po.product_id
-			WHERE o.created_at BETWEEN $1 AND $2
-		) AS subquery
-	`
-	err = r.DB.QueryRow(ctx, countQuery, startDate, endDate).Scan(&totalData)
+	var response models.UpdateOrderStatusRes
+	err := r.DB.QueryRow(ctx, query, statusID, orderID).Scan(&response.OrderID, &response.Status, &response.TransactionCode, &response.UpdateAt)
 	if err != nil {
 		return nil, err
 	}
 
-	totalPages := int(math.Ceil(float64(totalData) / float64(limit)))
-
-	meta := models.MetaData{
-		Data:       results,
-		TotalData:  totalData,
-		Page:       page,
-		TotalPages: totalPages,
-	}
-
-	if page < totalPages {
-		meta.NextLink = fmt.Sprintf("%s?page=%d&limit=%d&start_date=%s&end_date=%s", baseURL, page+1, limit, startDate.Format("2006-01-02"), endDate.Format("2006-01-02"))
-	}
-	if page > 1 {
-		meta.PrevLink = fmt.Sprintf("%s?page=%d&limit=%d&start_date=%s&end_date=%s", baseURL, page-1, limit, startDate.Format("2006-01-02"), endDate.Format("2006-01-02"))
-	}
-
-	return &meta, nil
+	return &response, nil
 }
