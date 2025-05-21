@@ -27,14 +27,20 @@ func NewProfile(db *pgxpool.Pool) *RepoProfile {
 }
 
 func (p *RepoProfile) GetProfile(ctx context.Context, UserId string) (*models.Profile, error) {
-	query := `SELECT fullname, phone, address, image FROM profiles WHERE user_id = $1`
+	// query := `SELECT fullname, phone, address, image, created_at, updated_at FROM profiles WHERE user_id = $1`
+	query := `SELECT p.fullname, u.email, p.phone, p.address, p.image, p.created_at, p.updated_at
+	 			FROM profiles p JOIN users u ON p.user_id = u.id
+				WHERE p.user_id = $1`
 
 	var profile models.Profile
 	err := p.DB.QueryRow(ctx, query, UserId).Scan(
 		&profile.Fullname,
+		&profile.Email,
 		&profile.Phone,
 		&profile.Address,
 		&profile.ProfileImage,
+		&profile.CreatedAt,
+		&profile.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
