@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"errors"
 	"log"
 	"strconv"
 	"time"
@@ -73,84 +72,69 @@ func (h *OrderHandlers) GetHistoryOrders(ctx *gin.Context) {
 
 	result, err := h.repo.GetHistoryOrders(ctx, offset, statusQ, userClaims.Uuid)
 	if err != nil {
-		response.InternalServerError("a server error occured", err.Error())
+		response.InternalServerError("Internal Server Error", "a server error occured")
 		return
 	}
 	println(len(result))
 	if len(result) == 0 {
-		response.NotFound("history order not found", errors.New("history order is empty"))
+		response.NotFound("Not Found", "history order is empty")
 		return
 	}
 
 	response.Success("success", result)
 }
 
-func (h *OrderHandlers) FetchTotalSales(ctx *gin.Context) {
-	response := models.NewResponse(ctx)
-
+func (h *OrderHandlers) FetchDataSalesHandler(ctx *gin.Context) {
 	startDateStr := ctx.Query("start_date")
 	endDateStr := ctx.Query("end_date")
+	responder := models.NewResponse(ctx)
+
+	if startDateStr == "" || endDateStr == "" {
+		log.Println("Bad Request:", "start_date and end_date query parameters are required")
+		responder.BadRequest("Bad Request", "date parameters are required")
+		return
+	}
 
 	startDate, err := time.Parse("2006-01-02", startDateStr)
 	if err != nil {
-		response.BadRequest("invalid start_date format (expected YYYY-MM-DD)", err.Error())
+		log.Println("Bad Request:", err)
+		responder.BadRequest("Bad Request", "Invalid start_date format. Use YYYY-MM-DD")
 		return
 	}
 
 	endDate, err := time.Parse("2006-01-02", endDateStr)
 	if err != nil {
-		response.BadRequest("invalid end_date format (expected YYYY-MM-DD)", err.Error())
+		log.Println("Bad Request:", err)
+		responder.BadRequest("Bad Request", "Invalid end_date format. Use YYYY-MM-DD")
 		return
 	}
 
-	res, err := h.repo.GetTotalSales(ctx.Request.Context(), startDate, endDate)
+	data, err := h.repo.GetDataSales(ctx, startDate, endDate)
 	if err != nil {
-		response.InternalServerError("failed to fetch total sales", err.Error())
+		log.Println("Internal Server Error:", err)
+		responder.InternalServerError("Failed to fetch sales data", err.Error())
 		return
 	}
 
-	response.Success("total sales fetched successfully", res)
+	responder.Success("Sales data fetched successfully", data)
 }
 
-func (h *OrderHandlers) FetchIncome(ctx *gin.Context) {
+func (h *OrderHandlers) UpdateOrderStatus(ctx *gin.Context) {
 	response := models.NewResponse(ctx)
 
-	startDateStr := ctx.Query("start_date")
-	endDateStr := ctx.Query("end_date")
-	pageStr := ctx.DefaultQuery("page", "1")
-	limitStr := ctx.DefaultQuery("limit", "5")
+	var req models.UpdateOrderStatusReq
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		log.Println("Bad Request:", err)
+		response.BadRequest("Bad Request", "invalid request body")
+		return
+	}
 
-	startDate, err := time.Parse("2006-01-02", startDateStr)
+	res, err := h.repo.UpdateStatusOrder(ctx.Request.Context(), req.OrderID, req.StatusID)
 	if err != nil {
-		response.BadRequest("invalid start_date format (expected YYYY-MM-DD)", err.Error())
+		log.Println("Internal Server Error:", err)
+		response.InternalServerError("Internal Server Error:", "Failed to update order status")
 		return
 	}
 
-	endDate, err := time.Parse("2006-01-02", endDateStr)
-	if err != nil {
-		response.BadRequest("invalid end_date format (expected YYYY-MM-DD)", err.Error())
-		return
-	}
-
-	page, err := strconv.Atoi(pageStr)
-	if err != nil || page < 1 {
-		response.BadRequest("invalid page param", nil)
-		return
-	}
-
-	limit, err := strconv.Atoi(limitStr)
-	if err != nil || limit < 1 {
-		response.BadRequest("invalid limit param", nil)
-		return
-	}
-
-	baseURL := ctx.Request.URL.Path
-
-	res, err := h.repo.GetIncomeSales(ctx.Request.Context(), startDate, endDate, page, limit, baseURL)
-	if err != nil {
-		response.InternalServerError("failed to fetch income sales", err.Error())
-		return
-	}
-
-	response.Success("income sales fetched successfully", res)
+	response.Success("Order status updated successfully", res)
 }
