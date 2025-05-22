@@ -9,7 +9,7 @@ type ProfileUser struct {
 	Fullname string `json:"fullname" form:"fullname"`
 	Phone    string `json:"phone" form:"phone"`
 	Address  string `json:"address" form:"address"`
-	// Email    string `json:"email" form:"email"`
+	Email    string `json:"email" form:"email"`
 
 	// Password string `json:"-" form:"password" binding:"required,min=8"`
 }
@@ -24,9 +24,9 @@ type ProfileForm struct {
 
 type Profile struct {
 	ProfileUser
-	ProfileImage string    `json:"profileImage"`
-	CreatedAt    time.Time `json:"createdAt"`
-	UpdatedAt    time.Time `json:"updatedAt"`
+	ProfileImage string     `json:"profileImage"`
+	CreatedAt    *time.Time `json:"createdAt"`
+	UpdatedAt    *time.Time `json:"updatedAt"`
 }
 
 type Profiles []Profile
