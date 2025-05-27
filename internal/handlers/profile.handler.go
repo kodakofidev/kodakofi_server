@@ -29,7 +29,7 @@ func (h *ProfileHandlers) FetchProfileHandler(ctx *gin.Context) {
 	var err error
 
 	if !exists {
-		responder.Unauthorized("authentication required", any(err))
+		responder.Unauthorized("authentication required", err)
 		return
 	}
 
@@ -41,7 +41,7 @@ func (h *ProfileHandlers) FetchProfileHandler(ctx *gin.Context) {
 
 	user, err := h.repo.GetProfile(ctx.Request.Context(), claims.Uuid)
 	if err != nil {
-		responder.NotFound("Profile Not Found", err.Error())
+		responder.NotFound("Profile Not Found", err)
 		return
 	}
 
@@ -120,5 +120,5 @@ func (h *ProfileHandlers) handleFileUpload(ctx *gin.Context, file *multipart.Fil
 		return "", "", fmt.Errorf("failed to save file: %w", err)
 	}
 
-	return filename, filename, nil
+	return filename, "public/profile-images/" + filename, nil
 }

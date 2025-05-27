@@ -1,9 +1,9 @@
 package handlers
 
 import (
-	"errors"
 	"log"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/kodakofidev/kodakofi_server/internal/models"
@@ -72,14 +72,69 @@ func (h *OrderHandlers) GetHistoryOrders(ctx *gin.Context) {
 
 	result, err := h.repo.GetHistoryOrders(ctx, offset, statusQ, userClaims.Uuid)
 	if err != nil {
-		response.InternalServerError("a server error occured", err.Error())
+		response.InternalServerError("Internal Server Error", "a server error occured")
 		return
 	}
 	println(len(result))
 	if len(result) == 0 {
-		response.NotFound("history order not found", errors.New("history order is empty"))
+		response.NotFound("Not Found", "history order is empty")
 		return
 	}
 
 	response.Success("success", result)
+}
+
+func (h *OrderHandlers) FetchDataSalesHandler(ctx *gin.Context) {
+	startDateStr := ctx.Query("start_date")
+	endDateStr := ctx.Query("end_date")
+	responder := models.NewResponse(ctx)
+
+	if startDateStr == "" || endDateStr == "" {
+		log.Println("Bad Request:", "start_date and end_date query parameters are required")
+		responder.BadRequest("Bad Request", "date parameters are required")
+		return
+	}
+
+	startDate, err := time.Parse("2006-01-02", startDateStr)
+	if err != nil {
+		log.Println("Bad Request:", err)
+		responder.BadRequest("Bad Request", "Invalid start_date format. Use YYYY-MM-DD")
+		return
+	}
+
+	endDate, err := time.Parse("2006-01-02", endDateStr)
+	if err != nil {
+		log.Println("Bad Request:", err)
+		responder.BadRequest("Bad Request", "Invalid end_date format. Use YYYY-MM-DD")
+		return
+	}
+
+	data, err := h.repo.GetDataSales(ctx, startDate, endDate)
+	if err != nil {
+		log.Println("Internal Server Error:", err)
+		responder.InternalServerError("Failed to fetch sales data", err.Error())
+		return
+	}
+
+	responder.Success("Sales data fetched successfully", data)
+}
+
+func (h *OrderHandlers) UpdateOrderStatus(ctx *gin.Context) {
+	response := models.NewResponse(ctx)
+
+	var req models.UpdateOrderStatusReq
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		log.Println("Bad Request:", err)
+		response.BadRequest("Bad Request", "invalid request body")
+		return
+	}
+
+	res, err := h.repo.UpdateStatusOrder(ctx.Request.Context(), req.OrderID, req.StatusID)
+	if err != nil {
+		log.Println("Internal Server Error:", err)
+		response.InternalServerError("Internal Server Error:", "Failed to update order status")
+		return
+	}
+
+	response.Success("Order status updated successfully", res)
 }

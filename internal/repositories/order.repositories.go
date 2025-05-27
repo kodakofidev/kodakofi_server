@@ -17,6 +17,8 @@ import (
 type OrderRepoInterface interface {
 	CreateOrder(ctx context.Context, data *models.CreateOrderRequest) (*models.CreateOrderResponse, error)
 	GetHistoryOrders(ctx context.Context, offset int, status, userId string) ([]models.OrderHistory, error)
+	GetDataSales(ctx context.Context, startDate, endDate time.Time) (*models.ProductSalesDataRes, error)
+	UpdateStatusOrder(ctx context.Context, orderID, statusID int) (*models.UpdateOrderStatusRes, error)
 }
 
 type RepoOrder struct {
@@ -290,4 +292,135 @@ func (r *RepoOrder) GetHistoryOrders(ctx context.Context, offset int, status, us
 		result = append(result, history)
 	}
 	return result, nil
+}
+
+func (r *RepoOrder) GetDataSales(ctx context.Context, startDate, endDate time.Time) (*models.ProductSalesDataRes, error) {
+	var res models.ProductSalesDataRes
+
+	// 1. Ambil status order
+	statusQuery := `
+		SELECT s.status, COUNT(o.id)
+		FROM orders o
+		JOIN status s ON o.status_id = s.id
+		WHERE o.created_at BETWEEN $1 AND $2
+		GROUP BY s.status
+	`
+	rows, err := r.DB.Query(ctx, statusQuery, startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	statusData := models.SalesDataStatus{}
+	for rows.Next() {
+		var status string
+		var count int
+		if err := rows.Scan(&status, &count); err != nil {
+			return nil, err
+		}
+		switch status {
+		case "Pending":
+			statusData.Pending = count
+		case "Processing":
+			statusData.Processing = count
+		case "Completed":
+			statusData.Completed = count
+		}
+	}
+	res.Status = statusData
+
+	// 2. Ambil total item terjual per hari (FIXED)
+	dailySalesQuery := `
+		SELECT DATE(o.created_at) AS order_date, SUM(po.qty) AS total_qty
+		FROM orders o
+		JOIN products_orders po ON o.id = po.order_id
+		WHERE o.created_at BETWEEN $1 AND $2
+		GROUP BY order_date
+		ORDER BY order_date
+	`
+	dailyRows, err := r.DB.Query(ctx, dailySalesQuery, startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
+	defer dailyRows.Close()
+
+	dailyItems := []models.DailySoldItems{}
+	for dailyRows.Next() {
+		var date time.Time
+		var productsSold int
+		if err := dailyRows.Scan(&date, &productsSold); err != nil {
+			return nil, err
+		}
+		dailyItems = append(dailyItems, models.DailySoldItems{
+			Date:         date.Format("2006-01-02"), // konversi ke string
+			ProductsSold: productsSold,
+		})
+	}
+	res.DailySoldItems = dailyItems
+
+	// 3. Total seluruh item terjual
+	err = r.DB.QueryRow(ctx, `
+		SELECT COALESCE(SUM(po.qty), 0)
+		FROM orders o
+		JOIN products_orders po ON o.id = po.order_id
+		WHERE o.created_at BETWEEN $1 AND $2
+	`, startDate, endDate).Scan(&res.TotalSoldItems)
+	if err != nil {
+		return nil, err
+	}
+
+	// 4. Data income per produk
+	incomeQuery := `
+		SELECT p.name, SUM(po.qty) AS total_qty, SUM(po.sub_total) AS income
+		FROM products_orders po
+		JOIN products p ON po.product_id = p.id
+		JOIN orders o ON o.id = po.order_id
+		WHERE o.created_at BETWEEN $1 AND $2
+		GROUP BY p.name
+		ORDER BY total_qty DESC
+	`
+	incomeRows, err := r.DB.Query(ctx, incomeQuery, startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
+	defer incomeRows.Close()
+
+	incomeData := []models.TotalIncomeItemResponse{}
+	for incomeRows.Next() {
+		var item models.TotalIncomeItemResponse
+		var incomeInt int
+		if err := incomeRows.Scan(&item.ProductName, &item.TotalItemSold, &incomeInt); err != nil {
+			return nil, err
+		}
+		item.Income = fmt.Sprintf("%d", incomeInt)
+		incomeData = append(incomeData, item)
+	}
+	res.IncomeDataPerItem = incomeData
+	res.TotalData = len(incomeData)
+
+	return &res, nil
+}
+
+func (r *RepoOrder) UpdateStatusOrder(ctx context.Context, orderID, statusID int) (*models.UpdateOrderStatusRes, error) {
+	query := `
+		UPDATE orders
+		SET
+			status_id = $1,
+			updated_at = now()
+		WHERE id = $2
+		RETURNING id,
+		(SELECT status FROM status
+			WHERE id = $1),
+		(SELECT transaction_code FROM transactions
+			WHERE order_id = $2),
+		updated_at
+	`
+
+	var response models.UpdateOrderStatusRes
+	err := r.DB.QueryRow(ctx, query, statusID, orderID).Scan(&response.OrderID, &response.Status, &response.TransactionCode, &response.UpdateAt)
+	if err != nil {
+		return nil, err
+	}
+
+	return &response, nil
 }
