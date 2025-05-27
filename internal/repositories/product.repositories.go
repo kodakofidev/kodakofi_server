@@ -104,7 +104,7 @@ func (r *RepoProduct) GetAllProducts(c context.Context, params *models.ProductQu
 		COALESCE(SUM(po.qty), 0) AS total_order, 
 		COALESCE(json_agg(DISTINCT jsonb_build_object('id', s.id, 'size', s.size, 'stock', sp.stock)) FILTER (WHERE s.id IS NOT NULL), '[]') AS size,
 		COALESCE(json_agg(DISTINCT pi.path) FILTER (WHERE pi.path IS NOT NULL), '[]') AS images, 
-		COUNT(r.*) AS total_ratings,
+		COUNT(DISTINCT r.*) AS total_ratings,
 		c.name AS category_name,
 		ps.total_filtered
 	FROM filtered_products fp
@@ -136,11 +136,13 @@ func (r *RepoProduct) GetAllProducts(c context.Context, params *models.ProductQu
 	default:
 		mainQuery += " ORDER BY p.created_at DESC"
 	}
-
+	log.Println()
 	mainQuery += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argIndex, argIndex+1)
 	args = append(args, pageSize, offset)
 
 	fullQuery := cteQuery + mainQuery
+
+	log.Println("[debug query]", fullQuery)
 
 	rows, err := r.DB.Query(c, fullQuery, args...)
 	if err != nil {
