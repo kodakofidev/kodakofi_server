@@ -62,18 +62,20 @@ func (r *RepoProduct) GetAllProducts(c context.Context, params *models.ProductQu
 		argIndex++
 	}
 
-	if params.Category != "" {
-		whereClauses = append(whereClauses, fmt.Sprintf("c.name = $%d", argIndex))
-		args = append(args, params.Category)
+	if params.Category != nil {
+		var categoryConditions []string
+		for _, category := range params.Category {
+			categoryConditions = append(categoryConditions, fmt.Sprintf("c.name = $%d", argIndex))
+			args = append(args, category)
+			argIndex++
+		}
+		whereClauses = append(whereClauses, "("+strings.Join(categoryConditions, " OR ")+")")
+	}
+
+	if params.Discount != nil {
+		whereClauses = append(whereClauses, fmt.Sprintf("d.id = $%d", argIndex))
+		args = append(args, params.Discount)
 		argIndex++
-	}
-
-	if params.Discount != "" {
-		whereClauses = append(whereClauses, "d.discount IS NOT NULL")
-	}
-
-	if params.Options == "newest" {
-		whereClauses = append(whereClauses, "p.created_at >= NOW()")
 	}
 
 	whereClauses = append(whereClauses, "p.is_deleted = false")
@@ -89,7 +91,6 @@ func (r *RepoProduct) GetAllProducts(c context.Context, params *models.ProductQu
 	if len(whereClauses) > 0 {
 		cteQuery += " WHERE " + strings.Join(whereClauses, " AND ")
 	}
-
 	cteQuery += `
 	),
 	product_stats AS (
@@ -128,8 +129,10 @@ func (r *RepoProduct) GetAllProducts(c context.Context, params *models.ProductQu
 		mainQuery += " ORDER BY p.name DESC"
 	case "cheapest":
 		mainQuery += " ORDER BY p.price ASC"
-	case "favorite":
+	case "bestseller":
 		mainQuery += " ORDER BY total_order DESC"
+	case "ratings":
+		mainQuery += " ORDER BY total_ratings DESC"
 	default:
 		mainQuery += " ORDER BY p.created_at DESC"
 	}
@@ -217,222 +220,6 @@ func (r *RepoProduct) GetAllProducts(c context.Context, params *models.ProductQu
 			Links:      links,
 		},
 	}
-	return response, nil
-}
-
-func (r *RepoProduct) GetAllProductss(c context.Context, params *models.ProductQueryParams) (*models.PaginatedResponse, error) {
-	pageSize := 6
-	if params.Page < 1 {
-		params.Page = 1
-	}
-	offset := (params.Page - 1) * pageSize
-
-	// Build WHERE clauses
-	var whereClauses []string
-	var args []interface{}
-	argIndex := 1 // Parameter index dimulai dari 1 untuk CTE
-
-	// Filter harga
-	if params.Min >= 0 || params.Max >= 0 {
-		minPrice := params.Min
-		if minPrice < 0 {
-			minPrice = 0
-		}
-		maxPrice := params.Max
-		if maxPrice <= 0 {
-			maxPrice = 1000000
-		}
-		whereClauses = append(whereClauses, fmt.Sprintf("p.price BETWEEN $%d AND $%d", argIndex, argIndex+1))
-		args = append(args, minPrice, maxPrice)
-		argIndex += 2
-	}
-
-	// Filter pencarian nama
-	if params.Search != "" {
-		whereClauses = append(whereClauses, fmt.Sprintf("p.name ILIKE '%%' || $%d || '%%'", argIndex))
-		args = append(args, params.Search)
-		argIndex++
-	}
-
-	// Filter kategori
-	if params.Category != "" {
-		whereClauses = append(whereClauses, fmt.Sprintf("c.name = $%d", argIndex))
-		args = append(args, params.Category)
-		argIndex++
-	}
-
-	// Filter diskon
-	if params.Discount != "" {
-		whereClauses = append(whereClauses, "d.discount IS NOT NULL")
-	}
-
-	// Filter newest
-	if params.Options == "newest" {
-		whereClauses = append(whereClauses, "p.created_at >= NOW()")
-	}
-
-	// Filter newest
-	whereClauses = append(whereClauses, "p.is_deleted = false ")
-
-	cteQuery := `
-    WITH filtered_products AS (
-        SELECT p.id
-        FROM products p
-        LEFT JOIN product_discounts pd ON pd.product_id = p.id 
-        LEFT JOIN discounts d ON d.id = pd.discount_id 
-        LEFT JOIN products_orders po ON po.product_id = p.id 
-        LEFT JOIN orders o ON o.id = po.order_id 
-        LEFT JOIN product_images pi ON pi.product_id = p.id 
-        LEFT JOIN ratings r ON r.product_id = p.id 
-        JOIN categories c ON c.id = p.category_id`
-
-	// Tambahkan WHERE clause jika ada
-	if len(whereClauses) > 0 {
-		cteQuery += " WHERE " + strings.Join(whereClauses, " AND ")
-	}
-
-	cteQuery += ` GROUP BY p.id, d.id, c.name
-    ),
-    product_stats AS (
-        SELECT COUNT(*) as total_filtered FROM filtered_products
-    )`
-
-	// Build main query
-	mainQuery := `
-    SELECT 
-        p.id, p.name, p.category_id, p.price, p.description,
-        d.name AS discount_name, d.discount, 
-        COALESCE(SUM(po.qty), 0) AS total_order, 
-		json_agg(json_build_object('id', s.id,'size', s.size, 'stock',sp.stock)) as size,
-        COALESCE(json_agg(distinct(pi.path)) FILTER (WHERE pi.path IS NOT NULL), '[]'::json) AS images, 
-        COUNT(r.*) AS total_ratings,
-        c.name AS category_name,
-        ps.total_filtered
-    FROM filtered_products fp
-    JOIN products p ON p.id = fp.id
-    LEFT JOIN product_discounts pd ON pd.product_id = p.id
-	left join size_products sp on sp.product_id  = p.id
-    left join sizes s on s.id = sp.size_id 
-    LEFT JOIN discounts d ON d.id = pd.discount_id
-    LEFT JOIN products_orders po ON po.product_id = p.id
-    LEFT JOIN product_images pi ON pi.product_id = p.id
-    LEFT JOIN ratings r ON r.product_id = p.id
-    JOIN categories c ON c.id = p.category_id
-    CROSS JOIN product_stats ps
-    GROUP BY p.id, d.id, c.name, ps.total_filtered`
-
-	// Tambahkan ORDER BY
-	switch params.Options {
-	case "oldest":
-		mainQuery += " ORDER BY p.created_at ASC"
-	case "asc":
-		mainQuery += " ORDER BY p.name ASC"
-	case "desc":
-		mainQuery += " ORDER BY p.name DESC"
-	case "cheapest":
-		mainQuery += " ORDER BY p.price ASC"
-	case "favorite":
-		mainQuery += " ORDER BY po.qty DESC"
-	default:
-		mainQuery += " ORDER BY p.created_at DESC"
-	}
-
-	// COALESCE(json_agg(json_build_object('id', s.id,'size', s.size)) FILTER (WHERE pi.path IS NOT NULL), '[]'::json) AS size,
-
-	// Tambahkan LIMIT dan OFFSET
-	mainQuery += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argIndex, argIndex+1)
-	args = append(args, pageSize, offset)
-
-	// Gabungkan query lengkap
-	fullQuery := cteQuery + mainQuery
-
-	// Eksekusi query
-	rows, err := r.DB.Query(c, fullQuery, args...)
-	if err != nil {
-		return nil, fmt.Errorf("error executing query: %w", err)
-	}
-	defer rows.Close()
-
-	var products models.Products
-	var totalFiltered int
-
-	for rows.Next() {
-		var product models.Product
-		var imagesJSON []byte
-		var discountName sql.NullString
-		var discount sql.NullFloat64
-
-		err := rows.Scan(
-			&product.ID,
-			&product.Name,
-			&product.CategoryID,
-			&product.Price,
-			&product.Description,
-			&discountName,
-			&discount,
-			&product.TotalOrder,
-			&product.Sizes,
-			&imagesJSON,
-			&product.TotalRatings,
-			&product.CategoryName,
-			&totalFiltered,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("error scanning row: %w", err)
-		}
-
-		// Handle NULL values
-		if discountName.Valid {
-			product.DiscountName = &discountName.String
-		}
-		if discount.Valid {
-			product.Discount = &discount.Float64
-		}
-
-		// Parse JSON images
-		if err := json.Unmarshal(imagesJSON, &product.Images); err != nil {
-			return nil, fmt.Errorf("error parsing images JSON: %w", err)
-		}
-
-		products = append(products, product)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error after row iteration: %w", err)
-	}
-
-	// Hitung total pages
-	totalPages := totalFiltered / pageSize
-	if totalFiltered%pageSize > 0 {
-		totalPages++
-	}
-
-	// Build pagination links
-	basePath := "/api/product"
-	links := map[string]string{
-		"prev": "",
-		"next": "",
-	}
-
-	if params.Page > 1 {
-		links["prev"] = fmt.Sprintf("%s?page=%d", basePath, params.Page-1)
-	}
-
-	if params.Page < totalPages {
-		links["next"] = fmt.Sprintf("%s?page=%d", basePath, params.Page+1)
-	}
-
-	response := &models.PaginatedResponse{
-		Data: products,
-		Pagination: models.Pagination{
-			Page:       params.Page,
-			PageSize:   pageSize,
-			TotalItems: totalFiltered,
-			TotalPages: totalPages,
-			Links:      links,
-		},
-	}
-
 	return response, nil
 }
 

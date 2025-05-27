@@ -25,13 +25,13 @@ type ProductSize struct {
 type Products []Product
 
 type ProductQueryParams struct {
-	Search   string `form:"search"`
-	Category string `form:"category"`
-	Discount string `form:"discount"`
-	Options  string `form:"options"`
-	Min      int    `form:"min"`
-	Max      int    `form:"max"`
-	Page     int    `form:"page"`
+	Search   string   `form:"search"`
+	Category []string `form:"category"`
+	Discount *int     `form:"discount"`
+	Options  string   `form:"options"`
+	Min      int      `form:"min-price"`
+	Max      int      `form:"max-price"`
+	Page     int      `form:"page"`
 }
 
 type ProductRequest struct {
