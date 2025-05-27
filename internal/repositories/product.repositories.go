@@ -22,6 +22,7 @@ type ProductRepoInterface interface {
 	DeleteImage(c context.Context, product_id string) error
 	UpdateProduct(ctx context.Context, productID string, updateData *models.ProductRequest, newImages []string, shouldUpdateImages bool, currentImages []string) error
 	ToggleLike(c context.Context, userID, productID string) (bool, error)
+	GetLikeStatus(c context.Context, userID, productID string) (bool, error)
 }
 
 type RepoProduct struct {
@@ -539,7 +540,7 @@ func (r *RepoProduct) UpdateProduct(ctx context.Context, productID string, updat
 func (r *RepoProduct) GetLikeStatus(c context.Context, userID, productID string,
 ) (bool, error) {
 	var exists bool
-	query := `SELECT EXISTS (SELECT 1 FROM product_likes  WHERE user_id = $1 AND product_id = $2)`
+	query := `SELECT EXISTS (SELECT 1 FROM ratings WHERE user_id = $1::uuid AND product_id = $2::uuid)`
 
 	err := r.DB.QueryRow(c, query, userID, productID).Scan(&exists)
 	if err != nil {
