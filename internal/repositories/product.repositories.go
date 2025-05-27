@@ -21,6 +21,7 @@ type ProductRepoInterface interface {
 	GetListImageProduct(c context.Context, id string) ([]string, error)
 	DeleteImage(c context.Context, product_id string) error
 	UpdateProduct(ctx context.Context, productID string, updateData *models.ProductRequest, newImages []string, shouldUpdateImages bool, currentImages []string) error
+	ToggleLike(c context.Context, userID, productID string) (bool, error)
 }
 
 type RepoProduct struct {
@@ -104,7 +105,7 @@ func (r *RepoProduct) GetAllProducts(c context.Context, params *models.ProductQu
 		COALESCE(SUM(po.qty), 0) AS total_order, 
 		COALESCE(json_agg(DISTINCT jsonb_build_object('id', s.id, 'size', s.size, 'stock', sp.stock)) FILTER (WHERE s.id IS NOT NULL), '[]') AS size,
 		COALESCE(json_agg(DISTINCT pi.path) FILTER (WHERE pi.path IS NOT NULL), '[]') AS images, 
-		COUNT(r.*) AS total_ratings,
+		COUNT(DISTINCT r.*) AS total_ratings,
 		c.name AS category_name,
 		ps.total_filtered
 	FROM filtered_products fp
@@ -136,11 +137,13 @@ func (r *RepoProduct) GetAllProducts(c context.Context, params *models.ProductQu
 	default:
 		mainQuery += " ORDER BY p.created_at DESC"
 	}
-
+	log.Println()
 	mainQuery += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argIndex, argIndex+1)
 	args = append(args, pageSize, offset)
 
 	fullQuery := cteQuery + mainQuery
+
+	log.Println("[debug query]", fullQuery)
 
 	rows, err := r.DB.Query(c, fullQuery, args...)
 	if err != nil {
@@ -531,4 +534,66 @@ func (r *RepoProduct) UpdateProduct(ctx context.Context, productID string, updat
 		return err
 	}
 	return tx.Commit(ctx)
+}
+
+func (r *RepoProduct) GetLikeStatus(c context.Context, userID, productID string,
+) (bool, error) {
+	var exists bool
+	query := `SELECT EXISTS (SELECT 1 FROM product_likes  WHERE user_id = $1 AND product_id = $2)`
+
+	err := r.DB.QueryRow(c, query, userID, productID).Scan(&exists)
+	if err != nil {
+		return false, err
+	}
+
+	return exists, nil
+}
+
+// ToggleLike - switch like status
+func (r *RepoProduct) ToggleLike(c context.Context, userID, productID string) (bool, error) {
+	// Start transaction
+	log.Println("[DEBUG USERID]", userID)
+	log.Println("[DEBUG PRODUCTID]", productID)
+	tx, err := r.DB.Begin(c)
+	if err != nil {
+		return false, err
+	}
+	defer func() {
+		if err != nil {
+			tx.Rollback(c)
+		}
+	}()
+
+	// Check current status
+	var exists bool
+	err = tx.QueryRow(c, `SELECT EXISTS(SELECT 1 FROM ratings WHERE user_id = $1::uuid AND product_id = $2::uuid)`, userID, productID).Scan(&exists)
+
+	if err != nil {
+		log.Println("[DEBUG LIKE1]", err)
+		return false, err
+	}
+
+	// Toggle based on current status
+	if exists {
+		_, err = tx.Exec(c, `DELETE FROM ratings WHERE user_id = $1::uuid AND product_id = $2::uuid`, userID, productID)
+		if err != nil {
+			log.Println("[DEBUG LIKE2]", err)
+
+			return false, err
+		}
+	} else {
+		_, err = tx.Exec(c, `INSERT INTO ratings (user_id, product_id) VALUES ($1::uuid, $2::uuid)`, userID, productID)
+		if err != nil {
+			log.Println("[DEBUG LIKE3]", err)
+
+			return false, err
+		}
+	}
+
+	// Commit transaction
+	if err = tx.Commit(c); err != nil {
+		return false, err
+	}
+
+	return !exists, nil
 }
