@@ -6,7 +6,6 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
-	"path/filepath"
 	fp "path/filepath"
 	"time"
 
@@ -173,70 +172,113 @@ func (h *ProductHandlers) UpdateProduct(ctx *gin.Context) {
 		return
 	}
 
-	// Get current images from database
-	currentImages, err := h.repo.GetListImageProduct(ctx.Request.Context(), productID)
-	if err != nil {
-		responder.InternalServerError("Failed to get current images", nil)
-		return
-	}
+	log.Println("[DEBUG PRODUCT]", productID)
 
-	// Process file uploads
-	var newImageNames []string
 	form, err := ctx.MultipartForm()
-	if err == nil { // Jika ada form file
-		imageFiles := form.File["images"]
-
-		// Validasi maksimal 3 gambar
-		if len(imageFiles) > 3 {
-			responder.BadRequest("Maximum 3 images allowed", nil)
-			return
-		}
-
-		for _, file := range imageFiles {
-			if !isImage(file) {
-				responder.BadRequest("Invalid image file type", nil)
-				return
-			}
-
-			filename, _, err := fileHandling(ctx, file)
-			if err != nil {
-				responder.InternalServerError("Failed to save image", nil)
-				return
-			}
-			newImageNames = append(newImageNames, filename)
-		}
-	}
-	shouldUpdateImages := false
-	if len(newImageNames) > 0 {
-		shouldUpdateImages = true
-	} else {
-		// Cek apakah ada request untuk menghapus gambar (misal: keep_images kosong)
-		if updateData.KeepImages != nil && len(updateData.KeepImages) < len(currentImages) {
-			shouldUpdateImages = true
-		}
-	}
-
-	// Update product data
-	err = h.repo.UpdateProduct(ctx.Request.Context(), productID, &updateData, newImageNames, shouldUpdateImages, currentImages) // Kirim current images ke repository
-
 	if err != nil {
-		// Cleanup: hapus gambar baru jika update gagal
-		for _, img := range newImageNames {
-			os.Remove(filepath.Join("public", "product-image", img))
-		}
-		responder.InternalServerError("Failed to update product", nil)
+		log.Println("Multipart form error:", err.Error())
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"message": "Failed to get uploaded files",
+			"error":   err.Error(),
+		})
 		return
 	}
 
-	// Hapus gambar lama jika ada gambar baru
-	if shouldUpdateImages && len(newImageNames) > 0 {
-		for _, oldImg := range currentImages {
-			os.Remove(filepath.Join("public", "product-image", oldImg))
-		}
+	// Handle multiple images upload
+	imageFiles := form.File["images"]
+	if len(imageFiles) == 0 {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"message": "At least one image is required",
+		})
+		return
 	}
 
-	responder.Success("Product updated successfully", gin.H{
-		"product_id":     productID,
-		"images_updated": shouldUpdateImages,
-	})
+	var imagesname []string
+	for _, file := range imageFiles {
+		// Validate image file
+		if !isImage(file) {
+			log.Printf("File %s is not an image", file.Filename)
+			continue
+		}
+
+		filename, _, err := fileHandling(ctx, file)
+		if err != nil {
+			log.Printf("Failed to upload image: %v", err)
+			continue
+		}
+
+		imagesname = append(imagesname, filename)
+	}
+
+	log.Println("[DEBUG]", imagesname)
+	if len(imagesname) != 0{
+
+	}
+
+	// // Get current images from database
+	// currentImages, err := h.repo.GetListImageProduct(ctx.Request.Context(), productID)
+	// if err != nil {
+	// 	responder.InternalServerError("Failed to get current images", nil)
+	// 	return
+	// }
+
+	// // Process file uploads
+	// var newImageNames []string
+	// form, err := ctx.MultipartForm()
+	// if err == nil { // Jika ada form file
+	// 	imageFiles := form.File["images"]
+
+	// 	// Validasi maksimal 3 gambar
+	// 	if len(imageFiles) > 3 {
+	// 		responder.BadRequest("Maximum 3 images allowed", nil)
+	// 		return
+	// 	}
+
+	// 	for _, file := range imageFiles {
+	// 		if !isImage(file) {
+	// 			responder.BadRequest("Invalid image file type", nil)
+	// 			return
+	// 		}
+
+	// 		filename, _, err := fileHandling(ctx, file)
+	// 		if err != nil {
+	// 			responder.InternalServerError("Failed to save image", nil)
+	// 			return
+	// 		}
+	// 		newImageNames = append(newImageNames, filename)
+	// 	}
+	// }
+	// shouldUpdateImages := false
+	// if len(newImageNames) > 0 {
+	// 	shouldUpdateImages = true
+	// } else {
+	// 	// Cek apakah ada request untuk menghapus gambar (misal: keep_images kosong)
+	// 	if updateData.KeepImages != nil && len(updateData.KeepImages) < len(currentImages) {
+	// 		shouldUpdateImages = true
+	// 	}
+	// }
+
+	// // Update product data
+	// err = h.repo.UpdateProduct(ctx.Request.Context(), productID, &updateData, newImageNames, shouldUpdateImages, currentImages) // Kirim current images ke repository
+
+	// if err != nil {
+	// 	// Cleanup: hapus gambar baru jika update gagal
+	// 	for _, img := range newImageNames {
+	// 		os.Remove(filepath.Join("public", "product-image", img))
+	// 	}
+	// 	responder.InternalServerError("Failed to update product", nil)
+	// 	return
+	// }
+
+	// // Hapus gambar lama jika ada gambar baru
+	// if shouldUpdateImages && len(newImageNames) > 0 {
+	// 	for _, oldImg := range currentImages {
+	// 		os.Remove(filepath.Join("public", "product-image", oldImg))
+	// 	}
+	// }
+
+	// responder.Success("Product updated successfully", gin.H{
+	// 	"product_id":     productID,
+	// 	"images_updated": shouldUpdateImages,
+	// })
 }

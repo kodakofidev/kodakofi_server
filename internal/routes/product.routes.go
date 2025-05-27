@@ -20,4 +20,5 @@ func product(r *gin.RouterGroup, db *pgxpool.Pool, mdw *middlewares.Middleware) 
 	// route.POST("", handlers.AddProduct)
 
 	route.POST("", mdw.VerifyToken, mdw.AccsessGate("admin"), handlers.AddProduct)
+
 }
