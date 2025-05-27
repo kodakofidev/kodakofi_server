@@ -292,3 +292,35 @@ func (h *ProductHandlers) UpdateLikeProduct(ctx *gin.Context) {
 	responder.Success("success", isExist)
 
 }
+func (h *ProductHandlers) GetLikeProducts(ctx *gin.Context) {
+	responder := models.NewResponse(ctx)
+
+	rawClaims, exists := ctx.Get("payloads")
+	var err error
+
+	if !exists {
+		responder.Unauthorized("authentication required", err)
+		return
+	}
+
+	claims, ok := rawClaims.(*pkg.Claims)
+	if !ok || claims == nil || claims.Uuid == "" {
+		responder.Unauthorized("invalid authentication claims", "Missing or invalid JWT claims")
+		return
+	}
+	userId := claims.Uuid
+
+	productId, ok := ctx.Params.Get("id")
+	if !ok {
+		responder.BadRequest("params needed Error", err)
+		return
+	}
+
+	isExist, err := h.repo.GetLikeStatus(ctx.Request.Context(), userId, productId)
+	if err != nil {
+		responder.InternalServerError("params needed Error", err)
+		return
+	}
+
+	responder.Success("success", isExist)
+}
