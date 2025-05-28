@@ -20,7 +20,10 @@ type ProductRepoInterface interface {
 	AddProduct(c context.Context, newProduct *models.ProductRequest, images []string) error
 	GetListImageProduct(c context.Context, id string) ([]string, error)
 	DeleteImage(c context.Context, product_id string) error
-	UpdateProduct(ctx context.Context, productID string, updateData *models.ProductRequest, newImages []string, shouldUpdateImages bool, currentImages []string) error
+	UpdateProduct(c context.Context, productID string, updateData *models.ProductRequest, listImage []string) error
+	ToggleLike(c context.Context, userID, productID string) (bool, error)
+	GetLikeStatus(c context.Context, userID, productID string) (bool, error)
+	GetAllProductsAdmin(c context.Context, params *models.ProductQueryParams) (*models.PaginatedResponse, error)
 }
 
 type RepoProduct struct {
@@ -104,7 +107,7 @@ func (r *RepoProduct) GetAllProducts(c context.Context, params *models.ProductQu
 		COALESCE(SUM(po.qty), 0) AS total_order, 
 		COALESCE(json_agg(DISTINCT jsonb_build_object('id', s.id, 'size', s.size, 'stock', sp.stock)) FILTER (WHERE s.id IS NOT NULL), '[]') AS size,
 		COALESCE(json_agg(DISTINCT pi.path) FILTER (WHERE pi.path IS NOT NULL), '[]') AS images, 
-		COUNT(r.*) AS total_ratings,
+		COUNT(DISTINCT r.*) AS total_ratings,
 		c.name AS category_name,
 		ps.total_filtered
 	FROM filtered_products fp
@@ -136,11 +139,13 @@ func (r *RepoProduct) GetAllProducts(c context.Context, params *models.ProductQu
 	default:
 		mainQuery += " ORDER BY p.created_at DESC"
 	}
-
+	log.Println()
 	mainQuery += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argIndex, argIndex+1)
 	args = append(args, pageSize, offset)
 
 	fullQuery := cteQuery + mainQuery
+
+	log.Println("[debug query]", fullQuery)
 
 	rows, err := r.DB.Query(c, fullQuery, args...)
 	if err != nil {
@@ -428,107 +433,289 @@ func (r *RepoProduct) GetListImageProduct(c context.Context, id string) ([]strin
 	return listImage, nil
 }
 
-func (r *RepoProduct) UpdateProduct(ctx context.Context, productID string, updateData *models.ProductRequest, newImages []string, shouldUpdateImages bool, currentImages []string,
-) error {
-	tx, err := r.DB.Begin(ctx)
+func (r *RepoProduct) UpdateProduct(c context.Context, productID string, updateData *models.ProductRequest, listImage []string) error {
+	tx, err := r.DB.Begin(c)
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
+		log.Println("[DEBUG 1] Begin transaction error:", err)
+		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() {
+		if err != nil {
+			tx.Rollback(c)
+		}
+	}()
 
-	// Build dynamic update query untuk product info
-	var queryParts []string
-	var params []interface{}
-	paramCount := 1
+	// Update product basic info if any fields are provided
+	if updateData.Name != nil || updateData.CategoryID != nil || updateData.Price != nil || updateData.Description != nil {
+		query := `UPDATE products SET `
+		var params []interface{}
+		var setClauses []string
+		paramCount := 1
 
-	if updateData.Name != nil {
-		queryParts = append(queryParts, fmt.Sprintf("name = $%d", paramCount))
-		params = append(params, updateData.Name)
-		paramCount++
-	}
-	if updateData.CategoryID != nil {
-		queryParts = append(queryParts, fmt.Sprintf("category_id = $%d", paramCount))
-		params = append(params, *updateData.CategoryID)
-		paramCount++
-	}
-	if updateData.Description != nil {
-		queryParts = append(queryParts, fmt.Sprintf("description = $%d", paramCount))
-		params = append(params, *&updateData.Description)
-		paramCount++
-	}
-	if updateData.Price != nil {
-		queryParts = append(queryParts, fmt.Sprintf("price = $%d", paramCount))
-		params = append(params, *updateData.Price)
-		paramCount++
-	}
+		if updateData.Name != nil {
+			log.Println("[NAME]", updateData.Name)
+			setClauses = append(setClauses, fmt.Sprintf("name = $%d", paramCount))
+			params = append(params, updateData.Name)
+			paramCount++
+		}
+		if updateData.CategoryID != nil {
+			setClauses = append(setClauses, fmt.Sprintf("category_id = $%d", paramCount))
+			params = append(params, updateData.CategoryID)
+			paramCount++
+		}
+		if updateData.Price != nil {
+			setClauses = append(setClauses, fmt.Sprintf("price = $%d", paramCount))
+			params = append(params, updateData.Price)
+			paramCount++
+		}
+		if updateData.Description != nil {
+			setClauses = append(setClauses, fmt.Sprintf("description = $%d", paramCount))
+			params = append(params, updateData.Description)
+			paramCount++
+		}
 
-	if len(queryParts) > 0 {
-		query := fmt.Sprintf(`UPDATE products SET %s, updated_at = NOW() WHERE id = $%d`, strings.Join(queryParts, ", "), paramCount)
+		if len(setClauses) == 0 {
+			return errors.New("no fields to update")
+		}
 
+		query += strings.Join(setClauses, ", ")
+		query += fmt.Sprintf(" WHERE id = $%d", paramCount)
 		params = append(params, productID)
 
-		_, err := tx.Exec(ctx, query, params...)
+		_, err := tx.Exec(c, query, params...)
 		if err != nil {
-			return fmt.Errorf("failed to update product: %w", err)
+			log.Println("[DEBUG 2] Update product error:", err)
+			return errors.New("failed to update product")
 		}
 	}
 
-	// Handle size updates
-	if updateData.Size != nil {
-		_, err = tx.Exec(ctx, "DELETE FROM size_products WHERE product_id = $1", productID)
+	// Update sizes and stock if provided
+	if len(updateData.Size) > 0 || updateData.Stock != nil {
+		// First delete existing sizes
+		_, err := tx.Exec(c, "DELETE FROM size_products WHERE product_id = $1", productID)
 		if err != nil {
-			return fmt.Errorf("failed to delete sizes: %w", err)
+			log.Println("[DEBUG 3] Delete existing sizes error:", err)
+			return errors.New("failed to update sizes")
 		}
 
+		// Insert new sizes if provided
 		if len(updateData.Size) > 0 {
-			querySize := `insert into size_products (product_id, stock,size_id) values`
-			valuesSize := []any{productID, updateData.Stock}
+			querySize := `INSERT INTO size_products (product_id, stock, size_id) VALUES `
+			valuesSize := []interface{}{productID, updateData.Stock}
+
 			for i, size := range updateData.Size {
 				if i > 0 {
 					querySize += ","
 				}
-				querySize += fmt.Sprintf("($1, $2,$%d)", i+3)
+				querySize += fmt.Sprintf("($1, $2, $%d)", i+3)
 				valuesSize = append(valuesSize, size)
 			}
-			log.Println("[valuessize]", valuesSize)
-			cmd, err := tx.Exec(ctx, querySize, valuesSize...)
+
+			_, err := tx.Exec(c, querySize, valuesSize...)
 			if err != nil {
-				log.Println("[DEBUG 2]", err)
-				return errors.New("add product failed")
+				log.Println("[DEBUG 4] Insert sizes error:", err)
+				return errors.New("failed to update sizes")
 			}
-			row := cmd.RowsAffected()
-			if row == 0 {
-				return errors.New("add product failed ")
-			}
-
 		}
 	}
-	_, err = tx.Exec(ctx, "DELETE FROM product_images WHERE product_id = $1", productID)
 
-	queryImage := `insert into product_images (product_id, path) values`
-	valuesImage := []any{productID}
-	for i, image := range newImages {
-		if i > 0 {
-			queryImage += ","
+	// Update images if provided
+	if len(listImage) > 0 {
+		// First delete existing images
+		_, err := tx.Exec(c, "DELETE FROM product_images WHERE product_id = $1", productID)
+		if err != nil {
+			log.Println("[DEBUG 5] Delete existing images error:", err)
+			return errors.New("failed to update images")
 		}
-		queryImage += fmt.Sprintf("($1,$%d)", i+2)
-		valuesImage = append(valuesImage, image)
-	}
-	log.Println("[DEBUG 2]", queryImage)
 
-	cmd, err := tx.Exec(ctx, queryImage, valuesImage...)
+		// Insert new images
+		queryImage := `INSERT INTO product_images (product_id, path) VALUES `
+		valuesImage := []interface{}{productID}
+
+		for i, image := range listImage {
+			if i > 0 {
+				queryImage += ","
+			}
+			queryImage += fmt.Sprintf("($1, $%d)", i+2)
+			valuesImage = append(valuesImage, image)
+		}
+
+		_, err = tx.Exec(c, queryImage, valuesImage...)
+		if err != nil {
+			log.Println("[DEBUG 6] Insert images error:", err)
+			return errors.New("failed to update images")
+		}
+	}
+
+	if err := tx.Commit(c); err != nil {
+		log.Println("[DEBUG 7] Commit error:", err)
+		return errors.New("failed to commit transaction")
+	}
+
+	return nil
+}
+
+func (r *RepoProduct) GetLikeStatus(c context.Context, userID, productID string,
+) (bool, error) {
+	var exists bool
+	query := `SELECT EXISTS (SELECT 1 FROM ratings WHERE user_id = $1::uuid AND product_id = $2::uuid)`
+
+	err := r.DB.QueryRow(c, query, userID, productID).Scan(&exists)
+	if err != nil {
+		return false, err
+	}
+
+	return exists, nil
+}
+
+// ToggleLike - switch like status
+func (r *RepoProduct) ToggleLike(c context.Context, userID, productID string) (bool, error) {
+	// Start transaction
+	log.Println("[DEBUG USERID]", userID)
+	log.Println("[DEBUG PRODUCTID]", productID)
+	tx, err := r.DB.Begin(c)
+	if err != nil {
+		return false, err
+	}
+	defer func() {
+		if err != nil {
+			tx.Rollback(c)
+		}
+	}()
+
+	// Check current status
+	var exists bool
+	err = tx.QueryRow(c, `SELECT EXISTS(SELECT 1 FROM ratings WHERE user_id = $1::uuid AND product_id = $2::uuid)`, userID, productID).Scan(&exists)
 
 	if err != nil {
-		log.Println("[DEBUG 3]", err)
+		log.Println("[DEBUG LIKE1]", err)
+		return false, err
+	}
 
-		return errors.New("add path image failed")
+	// Toggle based on current status
+	if exists {
+		_, err = tx.Exec(c, `DELETE FROM ratings WHERE user_id = $1::uuid AND product_id = $2::uuid`, userID, productID)
+		if err != nil {
+			log.Println("[DEBUG LIKE2]", err)
+
+			return false, err
+		}
+	} else {
+		_, err = tx.Exec(c, `INSERT INTO ratings (user_id, product_id) VALUES ($1::uuid, $2::uuid)`, userID, productID)
+		if err != nil {
+			log.Println("[DEBUG LIKE3]", err)
+
+			return false, err
+		}
 	}
-	row := cmd.RowsAffected()
-	if row == 0 {
-		return errors.New("add path image failed")
+
+	// Commit transaction
+	if err = tx.Commit(c); err != nil {
+		return false, err
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return err
+
+	return !exists, nil
+}
+
+func (r *RepoProduct) GetAllProductsAdmin(c context.Context, params *models.ProductQueryParams) (*models.PaginatedResponse, error) {
+	const pageSize = 5 // Konstanta untuk ukuran halaman
+	if params.Page < 1 {
+		params.Page = 1
 	}
-	return tx.Commit(ctx)
+	offset := (params.Page - 1) * pageSize
+
+	// Build WHERE clause
+	var whereClauses []string
+	var args []interface{}
+	argPos := 1 // Positional parameter index starts at 1
+
+	if params.Search != "" {
+		whereClauses = append(whereClauses, fmt.Sprintf("p.name ILIKE '%%' || $%d || '%%' OR c.name ILIKE '%%' || $%d || '%%'", argPos, argPos))
+		args = append(args, params.Search)
+		argPos++
+	}
+
+	// Build main query
+	query := `select p.id, p."name", p.price, p.is_deleted,  p.description,( SELECT json_agg(json_build_object('id', s.id,'size', s.size,'stock', sp.stock)) FROM size_products sp JOIN sizes s ON s.id = sp.size_id WHERE sp.product_id = p.id) AS sizes,COALESCE(json_agg(DISTINCT pi.path) FILTER (WHERE pi.path IS NOT NULL), '[]') AS images, COUNT(*) OVER() AS total_filtered from products p join size_products sp on p.id = sp.product_id  join sizes s on s.id = sp.size_id  join product_images pi  on pi.product_id = p.id join categories c on c.id  = p.category_id `
+
+	if len(whereClauses) > 0 {
+		query += " WHERE " + strings.Join(whereClauses, " AND ")
+	}
+
+	query += " GROUP BY p.id"
+	query += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argPos, argPos+1)
+	args = append(args, pageSize, offset)
+
+	log.Println("[DEBUG QUERY]", query, args)
+
+	rows, err := r.DB.Query(c, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("error executing query: %w", err)
+	}
+	defer rows.Close()
+
+	var products models.Products
+	var totalFiltered int
+
+	for rows.Next() {
+		var product models.Product
+		var sizesJSON, imagesJSON []byte
+
+		err := rows.Scan(
+			&product.ID,
+			&product.Name,
+			&product.Price,
+			&product.IsDeleted,
+			&product.Description,
+			&sizesJSON,
+			&imagesJSON,
+			&totalFiltered,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("error scanning row: %w", err)
+		}
+
+		// Parse JSON data
+		if err := json.Unmarshal(sizesJSON, &product.Sizes); err != nil {
+			return nil, fmt.Errorf("error parsing sizes JSON: %w", err)
+		}
+		if err := json.Unmarshal(imagesJSON, &product.Images); err != nil {
+			return nil, fmt.Errorf("error parsing images JSON: %w", err)
+		}
+
+		products = append(products, product)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error after row iteration: %w", err)
+	}
+
+	// Calculate pagination
+	totalPages := (totalFiltered + pageSize - 1) / pageSize // Pembulatan ke atas
+
+	// Build pagination links
+	basePath := "/api/product"
+	links := map[string]string{
+		"prev": "",
+		"next": "",
+	}
+
+	if params.Page > 1 {
+		links["prev"] = fmt.Sprintf("%s?page=%d", basePath, params.Page-1)
+	}
+	if params.Page < totalPages {
+		links["next"] = fmt.Sprintf("%s?page=%d", basePath, params.Page+1)
+	}
+
+	response := &models.PaginatedResponse{
+		Data: products,
+		Pagination: models.Pagination{
+			Page:       params.Page,
+			PageSize:   pageSize,
+			TotalItems: totalFiltered,
+			TotalPages: totalPages,
+			Links:      links,
+		},
+	}
+	return response, nil
 }

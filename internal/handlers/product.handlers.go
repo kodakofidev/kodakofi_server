@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/kodakofidev/kodakofi_server/internal/models"
 	"github.com/kodakofidev/kodakofi_server/internal/repositories"
+	"github.com/kodakofidev/kodakofi_server/pkg"
 )
 
 type ProductHandlers struct {
@@ -162,123 +163,145 @@ func fileHandling(ctx *gin.Context, file *multipart.FileHeader) (filename, filep
 }
 
 func (h *ProductHandlers) UpdateProduct(ctx *gin.Context) {
-	responder := models.NewResponse(ctx)
-	productID := ctx.Param("id")
+	response := models.NewResponse(ctx)
+
+	// Get product ID from URL parameter
+	productID, ok := ctx.Params.Get("id")
+	log.Println("PRODUCTID", productID)
+	if !ok {
+		log.Println("[DEBUG]", ok)
+		response.BadRequest("Invalid product ID", nil)
+		return
+	}
 
 	// Bind form data
-	var updateData models.ProductRequest
-	if err := ctx.ShouldBind(&updateData); err != nil {
-		responder.BadRequest("Invalid request data", gin.H{"error": err.Error()})
+	var formBody models.ProductRequest
+	if err := ctx.ShouldBind(&formBody); err != nil {
+		response.BadRequest("Invalid request data", gin.H{"error": err.Error()})
 		return
 	}
 
-	log.Println("[DEBUG PRODUCT]", productID)
+	var imagesName []string
 
+	// Handle image upload if provided
 	form, err := ctx.MultipartForm()
+	if err == nil { // If multipart form exists (images might be uploaded)
+		imageFiles := form.File["images"]
+
+		// Process each uploaded file
+		for _, file := range imageFiles {
+			// Validate image file
+			if !isImage(file) {
+				log.Printf("File %s is not an image", file.Filename)
+				continue
+			}
+
+			filename, _, err := fileHandling(ctx, file)
+			if err != nil {
+				log.Printf("Failed to upload image: %v", err)
+				continue
+			}
+
+			imagesName = append(imagesName, filename)
+		}
+	} else {
+		log.Println("No images uploaded or form not multipart")
+	}
+	log.Println("[DEBUG IMAGES]", formBody)
+
+	// Call repository to update product
+	err = h.repo.UpdateProduct(ctx.Request.Context(), productID, &formBody, imagesName)
 	if err != nil {
-		log.Println("Multipart form error:", err.Error())
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"message": "Failed to get uploaded files",
-			"error":   err.Error(),
-		})
+		log.Printf("Update product error: %v", err)
+		response.InternalServerError("Failed to update product", err)
 		return
 	}
 
-	// Handle multiple images upload
-	imageFiles := form.File["images"]
-	if len(imageFiles) == 0 {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"message": "At least one image is required",
-		})
+	response.Success("Product updated successfully", gin.H{
+		"product_id": productID,
+		"name":       formBody.Name,
+	})
+}
+
+func (h *ProductHandlers) UpdateLikeProduct(ctx *gin.Context) {
+	responder := models.NewResponse(ctx)
+
+	rawClaims, exists := ctx.Get("payloads")
+	var err error
+
+	if !exists {
+		responder.Unauthorized("authentication required", err)
 		return
 	}
 
-	var imagesname []string
-	for _, file := range imageFiles {
-		// Validate image file
-		if !isImage(file) {
-			log.Printf("File %s is not an image", file.Filename)
-			continue
-		}
+	claims, ok := rawClaims.(*pkg.Claims)
+	if !ok || claims == nil || claims.Uuid == "" {
+		responder.Unauthorized("invalid authentication claims", "Missing or invalid JWT claims")
+		return
+	}
+	userId := claims.Uuid
 
-		filename, _, err := fileHandling(ctx, file)
-		if err != nil {
-			log.Printf("Failed to upload image: %v", err)
-			continue
-		}
-
-		imagesname = append(imagesname, filename)
+	productId, ok := ctx.Params.Get("id")
+	if !ok {
+		responder.BadRequest("params needed Error", err)
+		return
 	}
 
-	log.Println("[DEBUG]", imagesname)
-	if len(imagesname) != 0{
-
+	isExist, err := h.repo.ToggleLike(ctx.Request.Context(), userId, productId)
+	if err != nil {
+		responder.InternalServerError("params needed Error", err)
+		return
 	}
 
-	// // Get current images from database
-	// currentImages, err := h.repo.GetListImageProduct(ctx.Request.Context(), productID)
-	// if err != nil {
-	// 	responder.InternalServerError("Failed to get current images", nil)
-	// 	return
-	// }
+	responder.Success("success", isExist)
 
-	// // Process file uploads
-	// var newImageNames []string
-	// form, err := ctx.MultipartForm()
-	// if err == nil { // Jika ada form file
-	// 	imageFiles := form.File["images"]
+}
+func (h *ProductHandlers) GetLikeProducts(ctx *gin.Context) {
+	responder := models.NewResponse(ctx)
 
-	// 	// Validasi maksimal 3 gambar
-	// 	if len(imageFiles) > 3 {
-	// 		responder.BadRequest("Maximum 3 images allowed", nil)
-	// 		return
-	// 	}
+	rawClaims, exists := ctx.Get("payloads")
+	var err error
 
-	// 	for _, file := range imageFiles {
-	// 		if !isImage(file) {
-	// 			responder.BadRequest("Invalid image file type", nil)
-	// 			return
-	// 		}
+	if !exists {
+		responder.Unauthorized("authentication required", err)
+		return
+	}
 
-	// 		filename, _, err := fileHandling(ctx, file)
-	// 		if err != nil {
-	// 			responder.InternalServerError("Failed to save image", nil)
-	// 			return
-	// 		}
-	// 		newImageNames = append(newImageNames, filename)
-	// 	}
-	// }
-	// shouldUpdateImages := false
-	// if len(newImageNames) > 0 {
-	// 	shouldUpdateImages = true
-	// } else {
-	// 	// Cek apakah ada request untuk menghapus gambar (misal: keep_images kosong)
-	// 	if updateData.KeepImages != nil && len(updateData.KeepImages) < len(currentImages) {
-	// 		shouldUpdateImages = true
-	// 	}
-	// }
+	claims, ok := rawClaims.(*pkg.Claims)
+	if !ok || claims == nil || claims.Uuid == "" {
+		responder.Unauthorized("invalid authentication claims", "Missing or invalid JWT claims")
+		return
+	}
+	userId := claims.Uuid
 
-	// // Update product data
-	// err = h.repo.UpdateProduct(ctx.Request.Context(), productID, &updateData, newImageNames, shouldUpdateImages, currentImages) // Kirim current images ke repository
+	productId, ok := ctx.Params.Get("id")
+	if !ok {
+		responder.BadRequest("params needed Error", err)
+		return
+	}
 
-	// if err != nil {
-	// 	// Cleanup: hapus gambar baru jika update gagal
-	// 	for _, img := range newImageNames {
-	// 		os.Remove(filepath.Join("public", "product-image", img))
-	// 	}
-	// 	responder.InternalServerError("Failed to update product", nil)
-	// 	return
-	// }
+	isExist, err := h.repo.GetLikeStatus(ctx.Request.Context(), userId, productId)
+	if err != nil {
+		responder.InternalServerError("params needed Error", err)
+		return
+	}
 
-	// // Hapus gambar lama jika ada gambar baru
-	// if shouldUpdateImages && len(newImageNames) > 0 {
-	// 	for _, oldImg := range currentImages {
-	// 		os.Remove(filepath.Join("public", "product-image", oldImg))
-	// 	}
-	// }
+	responder.Success("success", isExist)
+}
 
-	// responder.Success("Product updated successfully", gin.H{
-	// 	"product_id":     productID,
-	// 	"images_updated": shouldUpdateImages,
-	// })
+func (h *ProductHandlers) FetchAllProductsAdminHandler(ctx *gin.Context) {
+	var params models.ProductQueryParams
+	response := models.NewResponse(ctx)
+
+	if err := ctx.ShouldBindQuery(&params); err != nil {
+		response.BadRequest("params invalid", err.Error())
+		return
+	}
+	res, err := h.repo.GetAllProductsAdmin(ctx.Request.Context(), &params)
+	if err != nil {
+		response.InternalServerError("internal server errors", err.Error())
+		return
+	}
+
+	response.Success("get products success", res)
 }
