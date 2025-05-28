@@ -1,8 +1,11 @@
 package handlers
 
 import (
+	"fmt"
 	"log"
 	"net/http"
+	"path/filepath"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/kodakofidev/kodakofi_server/internal/models"
@@ -29,4 +32,44 @@ func (h *UserHandlers) FetchAllUsersHandler(ctx *gin.Context) {
 	}
 
 	res.Success("Fetch users success", users)
+}
+
+func (h *UserHandlers) PatchUserByAdminHandler(ctx *gin.Context) {
+	responder := models.NewResponse(ctx)
+
+	userID := ctx.Param("id")
+	if userID == "" {
+		responder.BadRequest("User ID is required in URL", nil)
+		return
+	}
+
+	var req models.UpdateUserByAdminReq
+	if err := ctx.ShouldBind(&req); err != nil {
+		responder.BadRequest("Invalid input", err)
+		return
+	}
+
+	// Handle image upload
+	if req.Image != nil {
+		filename := fmt.Sprintf("%d_%s", time.Now().Unix(), req.Image.Filename)
+		savePath := filepath.Join("public/profile-images", filename)
+
+		if err := ctx.SaveUploadedFile(req.Image, savePath); err != nil {
+			responder.InternalServerError("Failed to save uploaded image", err)
+			return
+		}
+
+		req.Image.Filename = filename
+	}
+
+	req.ID = userID
+
+	// Call repository
+	res, err := h.repo.UpdateUserByAdmin(ctx.Request.Context(), req)
+	if err != nil {
+		responder.InternalServerError("Failed to update user", err)
+		return
+	}
+
+	responder.Success("User updated successfully", res)
 }
