@@ -1,6 +1,9 @@
 package models
 
+import "mime/multipart"
+
 type User struct {
+	ID         string `json:"id"`
 	Fullname   string `json:"fullname"`
 	Phone      string `json:"phone"`
 	Address    string `json:"address"`
@@ -12,3 +15,17 @@ type User struct {
 }
 
 type Users []User
+
+type UserUpdateRes struct {
+	User
+	UpdatedAt string `json:"updated_at"`
+}
+
+type UpdateUserByAdminReq struct {
+	ID       string                `form:"-"`
+	Fullname string                `form:"fullname"`
+	Phone    string                `form:"phone"`
+	Role     string                `form:"role"`
+	Address  string                `form:"address"`
+	Image    *multipart.FileHeader `form:"image"`
+}
