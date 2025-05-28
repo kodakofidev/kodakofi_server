@@ -10,6 +10,7 @@ import (
 	"github.com/kodakofidev/kodakofi_server/internal/handlers"
 	"github.com/kodakofidev/kodakofi_server/internal/models"
 	"github.com/kodakofidev/kodakofi_server/internal/routes"
+	"github.com/kodakofidev/kodakofi_server/internal/utils"
 	"github.com/kodakofidev/kodakofi_server/pkg"
 )
 
@@ -31,6 +32,8 @@ func main() {
 	defer db.Close()
 
 	log.Println("DB connected successfully")
+
+	utils.InitConfig()
 
 	router := routes.InitRouter(db)
 
