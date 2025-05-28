@@ -1,18 +1,19 @@
 package models
 
 type Product struct {
-	ID           string        `json:"id"`
-	Name         string        `json:"name"`
-	CategoryID   int           `json:"category_id"`
-	Price        float64       `json:"price"`
-	Description  string        `json:"description"`
+	ID           string        `json:"id,omitempty"`
+	Name         string        `json:"name,omitempty"`
+	CategoryID   int           `json:"category_id,omitempty"`
+	Price        float64       `json:"price,omitempty"`
+	Description  string        `json:"description,omitempty"`
 	DiscountName *string       `json:"discount_name,omitempty"` // pointer untuk handle NULL
 	Discount     *float64      `json:"discount,omitempty"`      // pointer untuk handle NULL
-	TotalOrder   int           `json:"total_order"`
-	Sizes        []ProductSize `json:"sizes"`
-	Images       []string      `json:"images"`
-	TotalRatings int           `json:"total_ratings"`
-	CategoryName string        `json:"category_name"`
+	TotalOrder   int           `json:"total_order,omitempty"`
+	Sizes        []ProductSize `json:"sizes,omitempty"`
+	Images       []string      `json:"images,omitempty"`
+	TotalRatings int           `json:"total_ratings,omitempty"`
+	CategoryName string        `json:"category_name,omitempty"`
+	IsDeleted    bool          `json:"isdeleted"`
 }
 
 type ProductSize struct {
