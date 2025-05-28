@@ -20,6 +20,7 @@ func admin(r *gin.RouterGroup, db *pgxpool.Pool, mdw *middlewares.Middleware) {
 	route.GET("data-sales", mdw.VerifyToken, mdw.AccsessGate("admin"), handlersOrder.FetchDataSalesHandler)
 	route.PATCH("status", mdw.VerifyToken, mdw.AccsessGate("admin"), handlersOrder.UpdateOrderStatus)
 	route.GET("users", mdw.VerifyToken, mdw.AccsessGate("admin"), handlersUser.FetchAllUsersHandler)
+	route.PATCH("users/:id", mdw.VerifyToken, mdw.AccsessGate("admin"), handlersUser.PatchUserByAdminHandler)
 	// route.PATCH("user", mdw.VerifyToken, mdw.AccsessGate("admin"), handlers.)
 	// route.POST("user", mdw.VerifyToken, mdw.AccsessGate("admin"), handlers.)
 }
