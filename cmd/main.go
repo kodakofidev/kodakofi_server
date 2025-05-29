@@ -33,7 +33,8 @@ func main() {
 
 	log.Println("DB connected successfully")
 
-	utils.InitConfig()
+	utils.InitConfigProfile()
+	utils.InitConfigProduct()
 
 	router := routes.InitRouter(db)
 
