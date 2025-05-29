@@ -84,6 +84,39 @@ func (h *OrderHandlers) GetHistoryOrders(ctx *gin.Context) {
 	response.Success("success", result)
 }
 
+func (h *OrderHandlers) FetchDetailOrdersHandler(ctx *gin.Context) {
+	res := models.NewResponse(ctx)
+
+	// Ambil user_id dari JWT payload
+	payloads, exists := ctx.Get("payloads")
+	if !exists {
+		res.Unauthorized("Please login first", nil)
+		return
+	}
+	userClaims, ok := payloads.(*pkg.Claims)
+	if !ok {
+		res.Unauthorized("Malformed login identity", nil)
+		return
+	}
+	userID := userClaims.Uuid
+
+	// Ambil transaction_code dari query param
+	transactionCode := ctx.Param("transaction_code")
+	if transactionCode == "" {
+		res.BadRequest("Transaction code is required", nil)
+		return
+	}
+
+	// Ambil data dari repository
+	orderDetail, err := h.repo.GetDetailOrder(ctx, userID, transactionCode)
+	if err != nil {
+		res.InternalServerError("Failed to fetch detail order", nil)
+		return
+	}
+
+	res.Success("Fetch order details successed", orderDetail)
+}
+
 func (h *OrderHandlers) FetchDataSalesHandler(ctx *gin.Context) {
 	startDateStr := ctx.Query("start_date")
 	endDateStr := ctx.Query("end_date")

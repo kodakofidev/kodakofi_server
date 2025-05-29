@@ -86,3 +86,28 @@ type UpdateOrderStatusRes struct {
 	Status          string    `json:"status"`
 	UpdateAt        time.Time `json:"updated_at"`
 }
+
+type DetailOrderRes struct {
+	TransactionCode string `json:"transaction_code"` // diambil dari tabel transactions
+	Fullname        string `json:"fullname"`         // diambil dari tabel orders
+	Address         string `json:"address"`          // diambil dari tabel orders
+	Phone           string `json:"phone"`            // diambil dari tabel profiles dengan referensid dari tabel users dan tabel orders yaitu user_id
+	PaymentMethod   string `json:"payment_method"`   // diambil dari tabel payment_methods yang direfernsikan dari tabel orders dari column payment_methods_id
+	Shipping        string `json:"shipping"`         // diambil dari tabel delivery_methods yang direfernsikan dari tabel orders dari column delivery_methods_id
+	DeliveryFee     int    `json:"delivery_fee"`     // diambil dari column delivery_fee di tabel transactions
+	Tax             int    `json:"tax"`              // diambil dari column tax pada tabel transactions
+	Status          string `json:"status"`           // diambil dari tabel orders di column status_id dan merefernsikan ke tabel status
+	TotalAmount     int    `json:"total_amount"`     // diambil dari column total_amount di tabel transactions
+	CreatedAt       string `json:"created_at"`
+	OrderItems      []ItemDetailOrder
+}
+
+type ItemDetailOrder struct {
+	ProductID   string `json:"product_id"`   // diambil dari tabel products_orders
+	ProductName string `json:"product_name"` // diambil dari product name dari referensi id pada product
+	ProductImg  string `json:"product_img"`
+	Qty         int    `json:"qty"`         // diambil dari tabel products_orders
+	Size        string `json:"size"`        // diambil dari tabel products_orders
+	Temperature string `json:"temperature"` // diambil dari tabel products_orders dari column is_iced dan dikonversi menjadi string di response
+	SubTotal    int    `json:"sub_total"`   // diambil dari column sub_total dari tabel products_orders
+}
