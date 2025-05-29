@@ -338,6 +338,7 @@ func (r *RepoOrder) GetDetailOrder(ctx context.Context, userID, transactionCode 
 		&createdAt,
 	)
 	if err != nil {
+		log.Printf("Failed to fetch order detail for transaction_code=%s, user_id=%s: %v", transactionCode, userID, err)
 		return order, err
 	}
 
@@ -370,7 +371,7 @@ func (r *RepoOrder) GetDetailOrder(ctx context.Context, userID, transactionCode 
 
 	rows, err := r.DB.Query(ctx, itemQuery, userID, transactionCode)
 	if err != nil {
-		log.Println("QueryRow error:", err)
+		log.Printf("Failed to query order items for transaction_code=%s, user_id=%s: %v", transactionCode, userID, err)
 		return order, err
 	}
 	defer rows.Close()
@@ -391,7 +392,7 @@ func (r *RepoOrder) GetDetailOrder(ctx context.Context, userID, transactionCode 
 			&categoryID,
 			&image,
 		); err != nil {
-			log.Println("Scan error:", err)
+			log.Printf("Failed to scan item row for transaction_code=%s, user_id=%s: %v", transactionCode, userID, err)
 			return order, err
 		}
 
@@ -413,6 +414,12 @@ func (r *RepoOrder) GetDetailOrder(ctx context.Context, userID, transactionCode 
 
 		items = append(items, item)
 	}
+
+	if err = rows.Err(); err != nil {
+		log.Printf("Row iteration error for transaction_code=%s, user_id=%s: %v", transactionCode, userID, err)
+		return order, fmt.Errorf("error during item rows iteration: %w", err)
+	}
+
 	order.OrderItems = items
 
 	return order, nil
