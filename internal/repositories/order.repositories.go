@@ -20,6 +20,7 @@ type OrderRepoInterface interface {
 	CreateOrder(ctx context.Context, data *models.CreateOrderRequest) (*models.CreateOrderResponse, error)
 	GetHistoryOrders(ctx context.Context, offset int, status, userId string) ([]models.OrderHistory, error)
 	GetDetailOrder(ctx context.Context, userID, transactionCode string) (models.DetailOrderRes, error)
+	GetDetailOrderAdmin(ctx context.Context, transactionCode string) (models.DetailOrderRes, error)
 	GetDataSales(ctx context.Context, startDate, endDate time.Time) (*models.ProductSalesDataRes, error)
 	UpdateStatusOrder(ctx context.Context, orderID, statusID int) (*models.UpdateOrderStatusRes, error)
 }
@@ -257,7 +258,6 @@ func (r *RepoOrder) CreateOrder(ctx context.Context, data *models.CreateOrderReq
 
 }
 
-// repo get history orders
 func (r *RepoOrder) GetHistoryOrders(ctx context.Context, offset int, status, userId string) ([]models.OrderHistory, error) {
 
 	// query := "select t.transaction_code, o.created_at, t.total_amount, o.id, s.status from orders o join transactions t on o.id = t.order_id join status s on s.id = o.status_id where o.user_id = $1 "
@@ -418,6 +418,126 @@ func (r *RepoOrder) GetDetailOrder(ctx context.Context, userID, transactionCode 
 	if err = rows.Err(); err != nil {
 		log.Printf("Row iteration error for transaction_code=%s, user_id=%s: %v", transactionCode, userID, err)
 		return order, fmt.Errorf("error during item rows iteration: %w", err)
+	}
+
+	order.OrderItems = items
+
+	return order, nil
+}
+
+func (r *RepoOrder) GetDetailOrderAdmin(ctx context.Context, transactionCode string) (models.DetailOrderRes, error) {
+	var order models.DetailOrderRes
+	var createdAt time.Time
+
+	query := `
+	SELECT 
+		t.transaction_code,
+		o.fullname,
+		o.address,
+		p.phone,
+		pm.name AS payment_method,
+		dm.name AS shipping,
+		t.delivery_fee,
+		t.tax,
+		s.status,
+		t.total_amount,
+		t.created_at
+	FROM transactions t
+	JOIN orders o ON t.order_id = o.id
+	JOIN users u ON o.user_id = u.id
+	JOIN profiles p ON u.id = p.user_id
+	JOIN payment_methods pm ON o.payment_method_id = pm.id
+	JOIN delivery_methods dm ON o.delivery_method_id = dm.id
+	JOIN status s ON o.status_id = s.id
+	WHERE t.transaction_code = $1
+	`
+
+	err := r.DB.QueryRow(ctx, query, transactionCode).Scan(
+		&order.TransactionCode,
+		&order.Fullname,
+		&order.Address,
+		&order.Phone,
+		&order.PaymentMethod,
+		&order.Shipping,
+		&order.DeliveryFee,
+		&order.Tax,
+		&order.Status,
+		&order.TotalAmount,
+		&createdAt,
+	)
+	if err != nil {
+		return order, err
+	}
+
+	order.CreatedAt = createdAt.Format("2006-01-02 15:04")
+
+	// Ambil item detail dengan query yang sama, tapi tanpa filter userID juga
+	itemQuery := `
+		SELECT
+			po.product_id,
+			pr.name,
+			po.qty,
+			po.size,
+			po.is_iced,
+			po.sub_total,
+			pr.category_id,
+			pi.path
+		FROM products_orders po
+		JOIN products pr ON po.product_id = pr.id
+		LEFT JOIN (
+			SELECT DISTINCT ON (product_id) product_id, path
+			FROM product_images
+			ORDER BY product_id, created_at
+		) pi ON pr.id = pi.product_id
+		JOIN orders o ON po.order_id = o.id
+		JOIN transactions t ON t.order_id = o.id
+		WHERE t.transaction_code = $1 AND pr.is_deleted = false
+	`
+
+	rows, err := r.DB.Query(ctx, itemQuery, transactionCode)
+	if err != nil {
+		return order, err
+	}
+	defer rows.Close()
+
+	var items []models.ItemDetailOrder
+
+	for rows.Next() {
+		var item models.ItemDetailOrder
+		var isIced bool
+		var categoryID int
+		var image sql.NullString
+
+		if err := rows.Scan(
+			&item.ProductID,
+			&item.ProductName,
+			&item.Qty,
+			&item.Size,
+			&isIced,
+			&item.SubTotal,
+			&categoryID,
+			&image,
+		); err != nil {
+			return order, err
+		}
+
+		if categoryID == 1 || categoryID == 2 {
+			if isIced {
+				item.Temperature = "Ice"
+			} else {
+				item.Temperature = "Hot"
+			}
+		} else {
+			item.Temperature = "-"
+		}
+
+		if image.Valid && image.String != "" {
+			item.ProductImg = fmt.Sprintf("%s%s", utils.BaseImgProductURL, image.String)
+		} else {
+			item.ProductImg = fmt.Sprintf("%s%s", utils.BaseImgProductURL, "product-default.webp")
+		}
+
+		items = append(items, item)
 	}
 
 	order.OrderItems = items
