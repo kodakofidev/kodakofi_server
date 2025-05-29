@@ -22,6 +22,7 @@ type OrderRepoInterface interface {
 	GetDetailOrder(ctx context.Context, userID, transactionCode string) (models.DetailOrderRes, error)
 	GetDetailOrderAdmin(ctx context.Context, transactionCode string) (models.DetailOrderRes, error)
 	GetDataSales(ctx context.Context, startDate, endDate time.Time) (*models.ProductSalesDataRes, error)
+	GetOrderStatuses(ctx context.Context) ([]models.OrderStatus, error)
 	UpdateStatusOrder(ctx context.Context, orderID, statusID int) (*models.UpdateOrderStatusRes, error)
 }
 
@@ -650,6 +651,34 @@ func (r *RepoOrder) GetDataSales(ctx context.Context, startDate, endDate time.Ti
 	res.TotalData = len(incomeData)
 
 	return &res, nil
+}
+
+func (r *RepoOrder) GetOrderStatuses(ctx context.Context) ([]models.OrderStatus, error) {
+	query := `SELECT id, status FROM status ORDER BY id ASC`
+
+	rows, err := r.DB.Query(ctx, query)
+	if err != nil {
+		log.Println("[GetOrderStatuses] failed to execute query:", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	var statuses []models.OrderStatus
+	for rows.Next() {
+		var status models.OrderStatus
+		if err := rows.Scan(&status.ID, &status.Status); err != nil {
+			log.Println("[GetOrderStatuses] failed to scan row:", err)
+			return nil, err
+		}
+		statuses = append(statuses, status)
+	}
+
+	if err := rows.Err(); err != nil {
+		log.Println("[GetOrderStatuses] rows iteration error:", err)
+		return nil, err
+	}
+
+	return statuses, nil
 }
 
 func (r *RepoOrder) UpdateStatusOrder(ctx context.Context, orderID, statusID int) (*models.UpdateOrderStatusRes, error) {

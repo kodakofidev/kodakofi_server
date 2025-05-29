@@ -170,6 +170,19 @@ func (h *OrderHandlers) FetchDataSalesHandler(ctx *gin.Context) {
 	responder.Success("Sales data fetched successfully", data)
 }
 
+func (h *OrderHandlers) FetchOrderStatusesHandler(ctx *gin.Context) {
+	res := models.NewResponse(ctx)
+
+	statuses, err := h.repo.GetOrderStatuses(ctx)
+	if err != nil {
+		log.Println("[FetchOrderStatusesHandler] failed to get order statuses:", err)
+		res.InternalServerError("Failed to fetch order statuses", nil)
+		return
+	}
+
+	res.Success("Fetched order statuses successfully", statuses)
+}
+
 func (h *OrderHandlers) UpdateOrderStatus(ctx *gin.Context) {
 	response := models.NewResponse(ctx)
 

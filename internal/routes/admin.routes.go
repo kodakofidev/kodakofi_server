@@ -20,7 +20,6 @@ func admin(r *gin.RouterGroup, db *pgxpool.Pool, mdw *middlewares.Middleware) {
 	handlersProduct := handlers.NewProduct(repoProduct)
 
 	route.GET("/data-sales", mdw.VerifyToken, mdw.AccsessGate("admin"), handlersOrder.FetchDataSalesHandler)
-	route.PATCH("/status", mdw.VerifyToken, mdw.AccsessGate("admin"), handlersOrder.UpdateOrderStatus)
 	route.GET("/users", mdw.VerifyToken, mdw.AccsessGate("admin"), handlersUser.FetchAllUsersHandler)
 	// route.GET("/users/:id", mdw.VerifyToken, mdw.AccsessGate("admin"), handlersUser.)
 	route.PATCH("/users/:id", mdw.VerifyToken, mdw.AccsessGate("admin"), handlersUser.PatchUserByAdminHandler)
@@ -28,4 +27,6 @@ func admin(r *gin.RouterGroup, db *pgxpool.Pool, mdw *middlewares.Middleware) {
 	route.GET("/products", mdw.VerifyToken, mdw.AccsessGate("admin"), handlersProduct.FetchAllProductsAdminHandler)
 	// route.GET("/orders", mdw.VerifyToken, mdw.AccsessGate("admin"), handlersOrder.FetchDetailOrderAdminHandler)
 	route.GET("/orders/:transaction_code", mdw.VerifyToken, mdw.AccsessGate("admin"), handlersOrder.FetchDetailOrderAdminHandler)
+	route.GET("/orders/status", mdw.VerifyToken, mdw.AccsessGate("admin"), handlersOrder.FetchOrderStatusesHandler)
+	route.PATCH("/orders/status", mdw.VerifyToken, mdw.AccsessGate("admin"), handlersOrder.UpdateOrderStatus)
 }
