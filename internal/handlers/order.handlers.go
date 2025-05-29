@@ -117,6 +117,24 @@ func (h *OrderHandlers) FetchDetailOrdersHandler(ctx *gin.Context) {
 	res.Success("Fetch order details successed", orderDetail)
 }
 
+func (h *OrderHandlers) FetchDetailOrderAdminHandler(ctx *gin.Context) {
+	res := models.NewResponse(ctx)
+
+	transactionCode := ctx.Param("transaction_code")
+	if transactionCode == "" {
+		res.BadRequest("Transaction code is required", nil)
+		return
+	}
+
+	orderDetail, err := h.repo.GetDetailOrderAdmin(ctx, transactionCode)
+	if err != nil {
+		res.InternalServerError("Failed to fetch detail order", nil)
+		return
+	}
+
+	res.Success("Fetch order details successed", orderDetail)
+}
+
 func (h *OrderHandlers) FetchDataSalesHandler(ctx *gin.Context) {
 	startDateStr := ctx.Query("start_date")
 	endDateStr := ctx.Query("end_date")
