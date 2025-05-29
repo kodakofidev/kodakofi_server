@@ -75,6 +75,11 @@ type ProductSalesDataRes struct {
 	TotalData         int                       `json:"total_data"`       // total data dari IncomeDataPerItem, jadi hanya data IncomeDataPerItem yang berubah akibat data yang berlebihan
 }
 
+type OrderStatus struct {
+	ID     int    `json:"id"`
+	Status string `json:"status"`
+}
+
 type UpdateOrderStatusReq struct {
 	OrderID  int `json:"order_id"`
 	StatusID int `json:"status_id"`
