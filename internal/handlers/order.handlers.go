@@ -39,7 +39,7 @@ func (h *OrderHandlers) PostOrderHandler(ctx *gin.Context) {
 }
 
 // handlers get history order
-func (h *OrderHandlers) GetHistoryOrders(ctx *gin.Context) {
+func (h *OrderHandlers) FetchHistoryOrdersHandler(ctx *gin.Context) {
 	claims, _ := ctx.Get("payloads")
 	userClaims := claims.(*pkg.Claims)
 
@@ -84,7 +84,7 @@ func (h *OrderHandlers) GetHistoryOrders(ctx *gin.Context) {
 	response.Success("success", result)
 }
 
-func (h *OrderHandlers) FetchDetailOrdersHandler(ctx *gin.Context) {
+func (h *OrderHandlers) FetchDetailOrderHandler(ctx *gin.Context) {
 	res := models.NewResponse(ctx)
 
 	// Ambil user_id dari JWT payload
@@ -115,6 +115,19 @@ func (h *OrderHandlers) FetchDetailOrdersHandler(ctx *gin.Context) {
 	}
 
 	res.Success("Fetch order details successed", orderDetail)
+}
+
+func (h *OrderHandlers) FetchHistoryOrdersAdminHandler(ctx *gin.Context) {
+	res := models.NewResponse(ctx)
+
+	histories, err := h.repo.GetHystoryOrdersAdmin(ctx)
+	if err != nil {
+		log.Println("[OrderHandlers.FetchHistoryOrdersAdminHandler] failed to fetch order history:", err)
+		res.InternalServerError("Failed to get order history", err.Error())
+		return
+	}
+
+	res.Success("Successfully fetched all order history", histories)
 }
 
 func (h *OrderHandlers) FetchDetailOrderAdminHandler(ctx *gin.Context) {
