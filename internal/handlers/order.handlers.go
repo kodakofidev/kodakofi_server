@@ -104,7 +104,7 @@ func (h *OrderHandlers) FetchDetailOrderHandler(ctx *gin.Context) {
 	}
 	userClaims, ok := payloads.(*pkg.Claims)
 	if !ok {
-		res.Unauthorized("Malformed login identity", nil)
+		res.Unauthorized("Invalid authentication identity", nil)
 		return
 	}
 	userID := userClaims.Uuid
@@ -119,7 +119,8 @@ func (h *OrderHandlers) FetchDetailOrderHandler(ctx *gin.Context) {
 	// Ambil data dari repository
 	orderDetail, err := h.repo.GetDetailOrder(ctx, userID, transactionCode)
 	if err != nil {
-		res.InternalServerError("Failed to fetch detail order", nil)
+		log.Printf("[Handler][FetchDetailOrderHandler] Failed to fetch detail order: %v", err)
+		res.InternalServerError("Failed to fetch order details", nil)
 		return
 	}
 
