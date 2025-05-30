@@ -13,6 +13,6 @@ func order(r *gin.RouterGroup, db *pgxpool.Pool, mdw *middlewares.Middleware) {
 	repo := repositories.NewOrder(db)
 	handlers := handlers.NewOrder(repo)
 	route.POST("", mdw.VerifyToken, mdw.AccsessGate("user"), handlers.PostOrderHandler)
-	route.GET("", mdw.VerifyToken, mdw.AccsessGate("user"), handlers.GetHistoryOrders)
-	route.GET("/:transaction_code", mdw.VerifyToken, mdw.AccsessGate("user"), handlers.FetchDetailOrdersHandler)
+	route.GET("", mdw.VerifyToken, mdw.AccsessGate("user"), handlers.FetchHistoryOrdersHandler)
+	route.GET("/:transaction_code", mdw.VerifyToken, mdw.AccsessGate("user"), handlers.FetchDetailOrderHandler)
 }
