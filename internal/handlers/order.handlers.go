@@ -132,8 +132,8 @@ func (h *OrderHandlers) FetchHistoryOrdersAdminHandler(ctx *gin.Context) {
 
 	histories, err := h.repo.GetHystoryOrdersAdmin(ctx)
 	if err != nil {
-		log.Println("[OrderHandlers.FetchHistoryOrdersAdminHandler] failed to fetch order history:", err)
-		res.InternalServerError("Failed to get order history", err.Error())
+		log.Printf("[OrderHandlers][FetchHistoryOrdersAdminHandler] failed to fetch order history: %v", err)
+		res.InternalServerError("An error occurred while retrieving order history", nil)
 		return
 	}
 
