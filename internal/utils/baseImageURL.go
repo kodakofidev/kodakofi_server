@@ -15,6 +15,6 @@ func InitConfigProfile() {
 func InitConfigProduct() {
 	BaseImgProductURL = os.Getenv("BASE_IMAGE_PRODUCT_URL")
 	if BaseImgProductURL == "" {
-		BaseImgProductURL = "http://localhost:8080/public/product-images/" // fallback local
+		BaseImgProductURL = "http://localhost:8080/public/product-image/" // fallback local
 	}
 }
