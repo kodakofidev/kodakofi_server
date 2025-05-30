@@ -20,6 +20,7 @@ type OrderRepoInterface interface {
 	CreateOrder(ctx context.Context, data *models.CreateOrderRequest) (*models.CreateOrderResponse, error)
 	GetHistoryOrders(ctx context.Context, offset int, status, userId string) ([]models.OrderHistory, error)
 	GetDetailOrder(ctx context.Context, userID, transactionCode string) (models.DetailOrderRes, error)
+	GetHystoryOrdersAdmin(ctx context.Context) (models.AdminOrderHistories, error)
 	GetDetailOrderAdmin(ctx context.Context, transactionCode string) (models.DetailOrderRes, error)
 	GetDataSales(ctx context.Context, startDate, endDate time.Time) (*models.ProductSalesDataRes, error)
 	GetOrderStatuses(ctx context.Context) ([]models.OrderStatus, error)
@@ -424,6 +425,124 @@ func (r *RepoOrder) GetDetailOrder(ctx context.Context, userID, transactionCode 
 	order.OrderItems = items
 
 	return order, nil
+}
+
+func (r *RepoOrder) GetHystoryOrdersAdmin(ctx context.Context) (models.AdminOrderHistories, error) {
+	query := `
+		SELECT 
+			t.transaction_code, 
+			t.total_amount, 
+			t.created_at, 
+			s.status, 
+			o.id AS order_id
+		FROM transactions t
+		JOIN orders o ON o.id = t.order_id
+		JOIN status s ON s.id = o.status_id
+		ORDER BY t.created_at DESC;
+	`
+
+	rows, err := r.DB.Query(ctx, query)
+	if err != nil {
+		log.Println("[RepoOrder.GetHystoryOrdersAdmin] failed to execute main query:", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	var histories models.AdminOrderHistories
+
+	for rows.Next() {
+		var (
+			order     models.AdminOrderHistory
+			orderID   int
+			createdAt time.Time
+		)
+
+		err := rows.Scan(
+			&order.TransactionCode,
+			&order.TotalAmount,
+			&createdAt,
+			&order.Status,
+			&orderID,
+		)
+		if err != nil {
+			log.Println("[RepoOrder.GetHystoryOrdersAdmin] failed to scan transaction row:", err)
+			return nil, err
+		}
+
+		order.CreatedAt = createdAt.Format("2006-01-02 15:04")
+
+		// Query order items
+		itemQuery := `
+			SELECT 
+				p.name, po.size, po.qty, po.is_iced, p.category_id
+			FROM products_orders po
+			JOIN products p ON p.id = po.product_id
+			WHERE po.order_id = $1 AND p.is_deleted = false;
+		`
+
+		itemRows, err := r.DB.Query(ctx, itemQuery, orderID)
+		if err != nil {
+			log.Printf("[RepoOrder.GetHystoryOrdersAdmin] failed to query order items for order_id=%d: %v", orderID, err)
+			return nil, err
+		}
+
+		var items []models.AdminOrderItemRes
+		for itemRows.Next() {
+			var (
+				item       models.AdminOrderItemRes
+				size       string
+				qty        int
+				isIced     bool
+				categoryID int
+			)
+
+			if err := itemRows.Scan(
+				&item.ProductName,
+				&size,
+				&qty,
+				&isIced,
+				&categoryID,
+			); err != nil {
+				log.Printf("[RepoOrder.GetHystoryOrdersAdmin] failed to scan item for order_id=%d: %v", orderID, err)
+				itemRows.Close()
+				return nil, err
+			}
+
+			// Konversi size jadi R, M, L
+			switch strings.ToLower(size) {
+			case "reguler":
+				item.Size = "R"
+			case "medium":
+				item.Size = "M"
+			case "large":
+				item.Size = "L"
+			case "not drink":
+				item.Size = "-"
+			default:
+				item.Size = size
+			}
+
+			item.Qty = fmt.Sprintf("%dx", qty)
+
+			if categoryID == 1 || categoryID == 2 {
+				if isIced {
+					item.Temperature = "Ice"
+				} else {
+					item.Temperature = "Hot"
+				}
+			} else {
+				item.Temperature = "-"
+			}
+
+			items = append(items, item)
+		}
+		itemRows.Close()
+
+		order.OrderItems = items
+		histories = append(histories, order)
+	}
+
+	return histories, nil
 }
 
 func (r *RepoOrder) GetDetailOrderAdmin(ctx context.Context, transactionCode string) (models.DetailOrderRes, error) {
