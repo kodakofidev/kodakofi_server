@@ -48,12 +48,15 @@ func (h *OrderHandlers) FetchHistoryOrdersHandler(ctx *gin.Context) {
 	// tangkap query
 	pageQ := ctx.Query("page")
 	statusQ := ctx.Query("status")
+
 	var offset int
 	var pageQInt int
+
 	if pageQ != "" {
 		pageQNum, err := strconv.Atoi(pageQ)
 		if err != nil {
-			response.InternalServerError("a server error occured", err.Error())
+			log.Printf("[Handler][FetchHistoryOrdersHandler] invalid 'page' query param: %v\n", err)
+			response.BadRequest("Invalid query parameter", "'page' must be a number")
 			return
 		}
 		pageQInt += pageQNum
@@ -67,21 +70,27 @@ func (h *OrderHandlers) FetchHistoryOrdersHandler(ctx *gin.Context) {
 		offset = pageQInt*4 - 4
 	}
 
+	log.Printf("[Handler][FetchHistoryOrdersHandler] user_id=%s offset=%d status=%s\n", userClaims.Uuid, offset, statusQ)
+
 	log.Println("offset", offset)
 	log.Println("statusQ", statusQ)
 
 	result, err := h.repo.GetHistoryOrders(ctx, offset, statusQ, userClaims.Uuid)
 	if err != nil {
-		response.InternalServerError("Internal Server Error", "a server error occured")
-		return
-	}
-	println(len(result))
-	if len(result) == 0 {
-		response.NotFound("Not Found", "history order is empty")
+		log.Printf("[Handler][FetchHistoryOrdersHandler] failed to get order history: %v\n", err)
+		response.InternalServerError("Server error", "Failed to retrieve order history")
 		return
 	}
 
-	response.Success("success", result)
+	println(len(result))
+
+	if len(result) == 0 {
+		log.Printf("[Handler][FetchHistoryOrdersHandler] no order history found for user_id=%s\n", userClaims.Uuid)
+		response.NotFound("Not found", "Order history is empty")
+		return
+	}
+
+	response.Success("Success", result)
 }
 
 func (h *OrderHandlers) FetchDetailOrderHandler(ctx *gin.Context) {
