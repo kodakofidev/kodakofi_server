@@ -470,7 +470,7 @@ func (r *RepoOrder) GetHystoryOrdersAdmin(ctx context.Context) (models.AdminOrde
 
 	rows, err := r.DB.Query(ctx, query)
 	if err != nil {
-		log.Println("[RepoOrder.GetHystoryOrdersAdmin] failed to execute main query:", err)
+		log.Printf("[RepoOrder][GetHystoryOrdersAdmin] error querying transactions: %v", err)
 		return nil, err
 	}
 	defer rows.Close()
@@ -492,7 +492,7 @@ func (r *RepoOrder) GetHystoryOrdersAdmin(ctx context.Context) (models.AdminOrde
 			&orderID,
 		)
 		if err != nil {
-			log.Println("[RepoOrder.GetHystoryOrdersAdmin] failed to scan transaction row:", err)
+			log.Printf("[RepoOrder][GetHystoryOrdersAdmin] error scanning transaction row: %v", err)
 			return nil, err
 		}
 
@@ -509,7 +509,7 @@ func (r *RepoOrder) GetHystoryOrdersAdmin(ctx context.Context) (models.AdminOrde
 
 		itemRows, err := r.DB.Query(ctx, itemQuery, orderID)
 		if err != nil {
-			log.Printf("[RepoOrder.GetHystoryOrdersAdmin] failed to query order items for order_id=%d: %v", orderID, err)
+			log.Printf("[RepoOrder][GetHystoryOrdersAdmin] error querying order items for order_id=%d: %v", orderID, err)
 			return nil, err
 		}
 
@@ -530,7 +530,7 @@ func (r *RepoOrder) GetHystoryOrdersAdmin(ctx context.Context) (models.AdminOrde
 				&isIced,
 				&categoryID,
 			); err != nil {
-				log.Printf("[RepoOrder.GetHystoryOrdersAdmin] failed to scan item for order_id=%d: %v", orderID, err)
+				log.Printf("[RepoOrder][GetHystoryOrdersAdmin] error scanning item for order_id=%d: %v", orderID, err)
 				itemRows.Close()
 				return nil, err
 			}
