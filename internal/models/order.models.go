@@ -92,6 +92,23 @@ type UpdateOrderStatusRes struct {
 	UpdateAt        time.Time `json:"updated_at"`
 }
 
+type AdminOrderHistory struct {
+	TransactionCode string              `json:"transaction_code"`
+	CreatedAt       string              `json:"created_at"`
+	Status          string              `json:"status"`
+	TotalAmount     int                 `json:"total_amount"`
+	OrderItems      []AdminOrderItemRes `json:"order_items"`
+}
+
+type AdminOrderHistories []AdminOrderHistory
+
+type AdminOrderItemRes struct {
+	ProductName string `json:"product_name"`
+	Size        string `json:"size"`
+	Temperature string `json:"temperature"`
+	Qty         string `json:"qty"`
+}
+
 type DetailOrderRes struct {
 	TransactionCode string `json:"transaction_code"` // diambil dari tabel transactions
 	Fullname        string `json:"fullname"`         // diambil dari tabel orders
