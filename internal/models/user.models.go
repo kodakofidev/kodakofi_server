@@ -16,7 +16,7 @@ type User struct {
 
 type Users []User
 
-type UserUpdateRes struct {
+type UserDetailsRes struct {
 	User
 	UpdatedAt string `json:"updated_at"`
 }
