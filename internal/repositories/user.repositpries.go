@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -15,7 +16,8 @@ import (
 
 type UserRepoInterface interface {
 	GetAllUsers(ctx context.Context, search string) (models.Users, error)
-	UpdateUserByAdmin(ctx context.Context, req models.UpdateUserByAdminReq) (*models.UserUpdateRes, error)
+	GetOneUserByAdmin(ctx context.Context, userID string) (*models.UserDetailsRes, error)
+	UpdateUserByAdmin(ctx context.Context, req models.UpdateUserByAdminReq) (*models.UserDetailsRes, error)
 }
 
 type RepoUser struct {
@@ -97,7 +99,59 @@ func (r *RepoUser) GetAllUsers(ctx context.Context, search string) (models.Users
 	return users, nil
 }
 
-func (r *RepoUser) UpdateUserByAdmin(ctx context.Context, req models.UpdateUserByAdminReq) (*models.UserUpdateRes, error) {
+func (r *RepoUser) GetOneUserByAdmin(ctx context.Context, userID string) (*models.UserDetailsRes, error) {
+	query := `
+	SELECT
+		u.id,
+		p.fullname,
+		u.email,
+		p.phone,
+		u.role,
+		p.address,
+		p.image,
+		u.is_verified,
+		u.created_at,
+		p.updated_at
+	FROM users u
+	JOIN profiles p ON p.user_id = u.id
+	WHERE u.id = $1
+	`
+
+	var (
+		res       models.UserDetailsRes
+		createdAt time.Time
+		updatedAt *time.Time
+	)
+
+	err := r.DB.QueryRow(ctx, query, userID).Scan(
+		&res.ID,
+		&res.Fullname,
+		&res.Email,
+		&res.Phone,
+		&res.Role,
+		&res.Address,
+		&res.Image,
+		&res.IsVerified,
+		&createdAt,
+		&updatedAt,
+	)
+	if err != nil {
+		log.Printf("[RepoUser][GetOneUserByAdmin] failed to fetch user with ID %s: %v", userID, err)
+		return nil, fmt.Errorf("failed to retrieve user data: %w", err)
+	}
+
+	res.CreatedAt = createdAt.Format("2006-01-02 15:04")
+
+	if updatedAt != nil {
+		res.UpdatedAt = updatedAt.Format("2006-01-02 15:04")
+	} else {
+		res.UpdatedAt = ""
+	}
+
+	return &res, nil
+}
+
+func (r *RepoUser) UpdateUserByAdmin(ctx context.Context, req models.UpdateUserByAdminReq) (*models.UserDetailsRes, error) {
 	tx, err := r.DB.Begin(ctx)
 	if err != nil {
 		return nil, err
@@ -165,9 +219,9 @@ func (r *RepoUser) UpdateUserByAdmin(ctx context.Context, req models.UpdateUserB
 	`
 
 	var (
-		res       models.UserUpdateRes
+		res       models.UserDetailsRes
 		createdAt time.Time
-		updatedAt time.Time
+		updatedAt *time.Time
 	)
 	err = tx.QueryRow(ctx, query, req.ID).Scan(
 		&res.ID,
@@ -187,7 +241,11 @@ func (r *RepoUser) UpdateUserByAdmin(ctx context.Context, req models.UpdateUserB
 	}
 
 	res.CreatedAt = createdAt.Format("2006-01-02 15:04")
-	res.UpdatedAt = updatedAt.Format("2006-01-02 15:04")
+	if updatedAt != nil {
+		res.UpdatedAt = updatedAt.Format("2006-01-02 15:04")
+	} else {
+		res.UpdatedAt = ""
+	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return nil, err
