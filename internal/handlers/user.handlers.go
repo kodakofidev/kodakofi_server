@@ -1,15 +1,13 @@
 package handlers
 
 import (
-	"fmt"
 	"log"
 	"net/http"
-	"path/filepath"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/kodakofidev/kodakofi_server/internal/models"
 	"github.com/kodakofidev/kodakofi_server/internal/repositories"
+	"github.com/kodakofidev/kodakofi_server/internal/utils"
 )
 
 type UserHandlers struct {
@@ -69,22 +67,23 @@ func (h *UserHandlers) PatchUserByAdminHandler(ctx *gin.Context) {
 	}
 
 	// Handle image upload
+	var filename string
 	if req.Image != nil {
-		filename := fmt.Sprintf("%d_%s", time.Now().Unix(), req.Image.Filename)
-		savePath := filepath.Join("public/profile-images", filename)
-
-		if err := ctx.SaveUploadedFile(req.Image, savePath); err != nil {
-			responder.InternalServerError("Failed to save uploaded image", err)
+		var err error
+		filename, _, err = utils.FileNameProfile(ctx, req.Image, userID)
+		if err != nil {
+			responder.InternalServerError("Failed to upload image", err)
 			return
 		}
-
-		req.Image.Filename = filename
 	}
 
 	req.ID = userID
+	if filename != "" {
+		req.Image.Filename = filename
+	}
 
 	// Call repository
-	res, err := h.repo.UpdateUserByAdmin(ctx.Request.Context(), req)
+	res, err := h.repo.UpdateUserByAdmin(ctx.Request.Context(), req, filename)
 	if err != nil {
 		responder.InternalServerError("Failed to update user", err)
 		return
