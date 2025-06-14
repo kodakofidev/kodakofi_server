@@ -17,7 +17,7 @@ import (
 type UserRepoInterface interface {
 	GetAllUsers(ctx context.Context, search string) (models.Users, error)
 	GetOneUserByAdmin(ctx context.Context, userID string) (*models.UserDetailsRes, error)
-	UpdateUserByAdmin(ctx context.Context, req models.UpdateUserByAdminReq) (*models.UserDetailsRes, error)
+	UpdateUserByAdmin(ctx context.Context, req models.UpdateUserByAdminReq, imageFilename string) (*models.UserDetailsRes, error)
 }
 
 type RepoUser struct {
@@ -31,8 +31,15 @@ func NewUser(db *pgxpool.Pool) *RepoUser {
 func (r *RepoUser) GetAllUsers(ctx context.Context, search string) (models.Users, error) {
 	query := `
 		SELECT 
-			p.fullname, p.phone, p.address, p.image,
-			u.id, u.email, u.role, u.is_verified, u.created_at
+			p.fullname,
+			p.phone,
+			p.address,
+			p.image,
+			u.id,
+			u.email,
+			u.role,
+			u.is_verified,
+			u.created_at
 		FROM users u
 		JOIN profiles p ON p.user_id = u.id
 	`
@@ -80,10 +87,12 @@ func (r *RepoUser) GetAllUsers(ctx context.Context, search string) (models.Users
 		}
 
 		// Format image URL
-		if image != "" {
+		if image == "avatar_default.webp" {
 			user.Image = fmt.Sprintf("%s%s", utils.BaseImgProfileURL, image)
+		} else if image != "" {
+			user.Image = fmt.Sprintf("%sprofile-images/%s", utils.BaseImgProfileURL, image)
 		} else {
-			user.Image = image
+			user.Image = ""
 		}
 
 		// Format waktu ke string (contoh: 2006-01-02 15:04)
@@ -101,26 +110,27 @@ func (r *RepoUser) GetAllUsers(ctx context.Context, search string) (models.Users
 
 func (r *RepoUser) GetOneUserByAdmin(ctx context.Context, userID string) (*models.UserDetailsRes, error) {
 	query := `
-	SELECT
-		u.id,
-		p.fullname,
-		u.email,
-		p.phone,
-		u.role,
-		p.address,
-		p.image,
-		u.is_verified,
-		u.created_at,
-		p.updated_at
-	FROM users u
-	JOIN profiles p ON p.user_id = u.id
-	WHERE u.id = $1
+		SELECT
+			u.id,
+			p.fullname,
+			u.email,
+			p.phone,
+			u.role,
+			p.address,
+			p.image,
+			u.is_verified,
+			u.created_at,
+			p.updated_at
+		FROM users u
+		JOIN profiles p ON p.user_id = u.id
+		WHERE u.id = $1
 	`
 
 	var (
 		res       models.UserDetailsRes
 		createdAt time.Time
 		updatedAt *time.Time
+		image     string
 	)
 
 	err := r.DB.QueryRow(ctx, query, userID).Scan(
@@ -130,7 +140,8 @@ func (r *RepoUser) GetOneUserByAdmin(ctx context.Context, userID string) (*model
 		&res.Phone,
 		&res.Role,
 		&res.Address,
-		&res.Image,
+		&image,
+		// &res.Image,
 		&res.IsVerified,
 		&createdAt,
 		&updatedAt,
@@ -138,6 +149,14 @@ func (r *RepoUser) GetOneUserByAdmin(ctx context.Context, userID string) (*model
 	if err != nil {
 		log.Printf("[RepoUser][GetOneUserByAdmin] failed to fetch user with ID %s: %v", userID, err)
 		return nil, fmt.Errorf("failed to retrieve user data: %w", err)
+	}
+
+	if image == "avatar_default.webp" {
+		res.Image = fmt.Sprintf("%s%s", utils.BaseImgProfileURL, image)
+	} else if image != "" {
+		res.Image = fmt.Sprintf("%sprofile-images/%s", utils.BaseImgProfileURL, image)
+	} else {
+		res.Image = ""
 	}
 
 	res.CreatedAt = createdAt.Format("2006-01-02 15:04")
@@ -151,7 +170,7 @@ func (r *RepoUser) GetOneUserByAdmin(ctx context.Context, userID string) (*model
 	return &res, nil
 }
 
-func (r *RepoUser) UpdateUserByAdmin(ctx context.Context, req models.UpdateUserByAdminReq) (*models.UserDetailsRes, error) {
+func (r *RepoUser) UpdateUserByAdmin(ctx context.Context, req models.UpdateUserByAdminReq, imageFilename string) (*models.UserDetailsRes, error) {
 	tx, err := r.DB.Begin(ctx)
 	if err != nil {
 		return nil, err
@@ -192,17 +211,14 @@ func (r *RepoUser) UpdateUserByAdmin(ctx context.Context, req models.UpdateUserB
 	    updated_at = NOW()
 	WHERE user_id = $5
 	`
-	newImage := ""
-	if req.Image != nil {
-		newImage = req.Image.Filename
-	}
-	_, err = tx.Exec(ctx, queryProfile, req.Fullname, req.Phone, req.Address, newImage, req.ID)
+
+	_, err = tx.Exec(ctx, queryProfile, req.Fullname, req.Phone, req.Address, imageFilename, req.ID)
 	if err != nil {
 		return nil, err
 	}
 
 	// Hapus gambar lama jika berbeda dan bukan default
-	if newImage != "" && oldImage != "" && oldImage != "avatar_default.svg" {
+	if imageFilename != "" && oldImage != "" && oldImage != "avatar_default.webp" && oldImage != imageFilename {
 		path := filepath.Join("public/profile-images", oldImage)
 		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return nil, fmt.Errorf("failed to delete old image: %w", err)
@@ -211,17 +227,27 @@ func (r *RepoUser) UpdateUserByAdmin(ctx context.Context, req models.UpdateUserB
 
 	// Ambil data hasil update
 	query := `
-	SELECT u.id, p.fullname, u.email, p.phone, u.role, p.address, p.image, u.is_verified, 
-	       u.created_at, p.updated_at
-	FROM users u
-	JOIN profiles p ON p.user_id = u.id
-	WHERE u.id = $1
+		SELECT
+			u.id,
+			p.fullname,
+			u.email,
+			p.phone,
+			u.role,
+			p.address,
+			p.image,
+			u.is_verified, 
+			u.created_at,
+			p.updated_at
+		FROM users u
+		JOIN profiles p ON p.user_id = u.id
+		WHERE u.id = $1
 	`
 
 	var (
 		res       models.UserDetailsRes
 		createdAt time.Time
 		updatedAt *time.Time
+		image     string
 	)
 	err = tx.QueryRow(ctx, query, req.ID).Scan(
 		&res.ID,
@@ -230,7 +256,7 @@ func (r *RepoUser) UpdateUserByAdmin(ctx context.Context, req models.UpdateUserB
 		&res.Phone,
 		&res.Role,
 		&res.Address,
-		&res.Image,
+		&image,
 		&res.IsVerified,
 		&createdAt,
 		&updatedAt,
@@ -240,7 +266,16 @@ func (r *RepoUser) UpdateUserByAdmin(ctx context.Context, req models.UpdateUserB
 		return nil, err
 	}
 
+	if image == "avatar_default.webp" {
+		res.Image = fmt.Sprintf("%s%s", utils.BaseImgProfileURL, image)
+	} else if image != "" {
+		res.Image = fmt.Sprintf("%sprofile-images/%s", utils.BaseImgProfileURL, image)
+	} else {
+		res.Image = ""
+	}
+
 	res.CreatedAt = createdAt.Format("2006-01-02 15:04")
+
 	if updatedAt != nil {
 		res.UpdatedAt = updatedAt.Format("2006-01-02 15:04")
 	} else {
