@@ -38,9 +38,11 @@ func main() {
 
 	router := routes.InitRouter(db)
 
-	router.Static("/public/profile-images", "./public/profile-images")
+	// router.Static("/public/profile-images", "./public/profile-images")
 
-	router.Static("/public/product-image", "./public/product-image")
+	// router.Static("/public/product-image", "./public/product-image")
+
+	router.Static("/public", "./public")
 
 	router.GET("/ping", func(c *gin.Context) {
 		responder := models.NewResponse(c)
