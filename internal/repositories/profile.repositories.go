@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kodakofidev/kodakofi_server/internal/models"
+	"github.com/kodakofidev/kodakofi_server/internal/utils"
 	"github.com/kodakofidev/kodakofi_server/pkg"
 )
 
@@ -27,22 +29,53 @@ func NewProfile(db *pgxpool.Pool) *RepoProfile {
 }
 
 func (p *RepoProfile) GetProfile(ctx context.Context, UserId string) (*models.Profile, error) {
-	query := `SELECT p.fullname, u.email, p.phone, p.address, p.image, p.created_at, p.updated_at
-	 			FROM profiles p JOIN users u ON p.user_id = u.id
-				WHERE p.user_id = $1`
+	query := `
+		SELECT
+			p.fullname,
+			u.email,
+			p.phone,
+			p.address,
+			p.image,
+			p.created_at,
+			p.updated_at
+	 	FROM profiles p JOIN users u ON p.user_id = u.id
+		WHERE p.user_id = $1
+	`
 
-	var profile models.Profile
+	var (
+		profile      models.Profile
+		profileImage string
+		createdAt    time.Time
+		updatedAt    *time.Time
+	)
+
 	err := p.DB.QueryRow(ctx, query, UserId).Scan(
 		&profile.Fullname,
 		&profile.Email,
 		&profile.Phone,
 		&profile.Address,
-		&profile.ProfileImage,
-		&profile.CreatedAt,
-		&profile.UpdatedAt,
+		&profileImage,
+		&createdAt,
+		&updatedAt,
 	)
+
 	if err != nil {
 		return nil, err
+	}
+
+	if profileImage == "avatar_default.webp" {
+		profile.ProfileImage = fmt.Sprintf("%s%s", utils.BaseImgProfileURL, profileImage)
+	} else if profileImage != "" {
+		profile.ProfileImage = fmt.Sprintf("%sprofile-images/%s", utils.BaseImgProfileURL, profileImage)
+	} else {
+		profile.ProfileImage = ""
+	}
+
+	profile.CreatedAt = createdAt.Format("2006-01-02 15:04")
+	if updatedAt != nil {
+		profile.UpdatedAt = updatedAt.Format("2006-01-02 15:04")
+	} else {
+		profile.UpdatedAt = ""
 	}
 
 	return &profile, nil
