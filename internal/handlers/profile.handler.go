@@ -1,16 +1,12 @@
 package handlers
 
 import (
-	"fmt"
 	"log"
-	"mime/multipart"
-	"os"
-	"path/filepath"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/kodakofidev/kodakofi_server/internal/models"
 	"github.com/kodakofidev/kodakofi_server/internal/repositories"
+	"github.com/kodakofidev/kodakofi_server/internal/utils"
 	"github.com/kodakofidev/kodakofi_server/pkg"
 )
 
@@ -73,52 +69,25 @@ func (h *ProfileHandlers) EditProfileHandler(ctx *gin.Context) {
 		return
 	}
 
-	var profileImageURL string
+	var profileImageFilename string
 	if formBody.ProfileImage != nil {
-		filename, filepath, err := h.handleFileUpload(ctx, formBody.ProfileImage, userId)
+		filename, _, err := utils.FileNameProfile(ctx, formBody.ProfileImage, userId)
 		if err != nil {
 			responder.InternalServerError("Error", "Internal server error")
 			return
 		}
 
 		log.Println("[DEBUG] FILE NAME CHECK", filename)
-		profileImageURL = filepath
+		profileImageFilename = filename
 	}
 
 	// log.Println("[DEBUG] IMAGE URL", profileImageURL)
 
-	result, err := h.repo.EditProfile(ctx.Request.Context(), userId, formBody, profileImageURL)
+	result, err := h.repo.EditProfile(ctx.Request.Context(), userId, formBody, profileImageFilename)
 	if err != nil {
 		responder.InternalServerError("Failed to edit profile", err)
 		return
 	}
 
 	responder.Success("Profile Updated succesfully!", result)
-}
-
-// UPLOAD IMAGE HANDLER
-func (h *ProfileHandlers) handleFileUpload(ctx *gin.Context, file *multipart.FileHeader, userID string) (filename, filePath string, err error) {
-	//First delete any existing profile image for this very user
-	oldFiles, err := filepath.Glob(filepath.Join("public", "profile-images", "*_"+userID+"_profile*"))
-	if err != nil {
-		return "", "", fmt.Errorf("failed to check for existing files: %w", err)
-	}
-
-	for _, oldFile := range oldFiles {
-		if err := os.Remove(oldFile); err != nil {
-			log.Printf("Warning: failed to delete old file %s: %v", oldFile, err)
-		}
-	}
-
-	//GENERATE FILE NAME AND ADDING PATH
-
-	ext := filepath.Ext(file.Filename)
-	filename = fmt.Sprintf("%d_%s_profile%s", time.Now().UnixNano(), userID, ext)
-	filePath = filepath.Join("public", "profile-images", filename)
-
-	if err := ctx.SaveUploadedFile(file, filePath); err != nil {
-		return "", "", fmt.Errorf("failed to save file: %w", err)
-	}
-
-	return filename, "public/profile-images/" + filename, nil
 }
