@@ -2,7 +2,6 @@ package models
 
 import (
 	"mime/multipart"
-	"time"
 )
 
 type ProfileUser struct {
@@ -24,9 +23,9 @@ type ProfileForm struct {
 
 type Profile struct {
 	ProfileUser
-	ProfileImage string     `json:"profileImage"`
-	CreatedAt    *time.Time `json:"createdAt"`
-	UpdatedAt    *time.Time `json:"updatedAt"`
+	ProfileImage string `json:"profileImage"`
+	CreatedAt    string `json:"createdAt"`
+	UpdatedAt    string `json:"updatedAt"`
 }
 
 type Profiles []Profile
